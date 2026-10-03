@@ -88,7 +88,7 @@ export default function App() {
         <div className="brand">
           <Ic.Logo />
           auto-typer
-          <small>시험지 타이핑·양식 변환</small>
+          <small>학습자료 타이핑·양식 변환</small>
         </div>
         <span className="free-badge">선생님 무료</span>
         <div className="spacer" />

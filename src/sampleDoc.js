@@ -2,7 +2,7 @@
 import { newDoc, newGroup, newQuestion, newText } from './model.js';
 
 export function sampleDoc() {
-  const d = newDoc('예제 시험지');
+  const d = newDoc('예제 학습자료');
   d.items = [
     newQuestion({
       stem: '다음 글의 밑줄 친 부분 중, 어법상 **틀린** 것은?',

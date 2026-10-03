@@ -42,7 +42,7 @@ export default function NewJob({ settings, onCancel, onDone, onSettings, notify 
       const res = await convert({
         files: tab === 'file' ? files : [],
         text: tab === 'paste' ? text : '',
-        title: title || '새 시험지',
+        title: title || '새 학습자료',
         settings: { ...settings, engine, handwriting },
         signal: abort.current.signal,
         onProgress: (ev) =>
@@ -131,7 +131,7 @@ export default function NewJob({ settings, onCancel, onDone, onSettings, notify 
                         </button>
                       </div>
                     ))}
-                    <div className="hint">여러 파일은 올린 순서대로 이어 붙여 한 시험지로 만듭니다. 예전 .hwp 는 한글에서 hwpx 로 저장한 뒤 올려 주세요.</div>
+                    <div className="hint">여러 파일은 올린 순서대로 이어 붙여 한 학습자료로 만듭니다. 예전 .hwp 는 한글에서 hwpx 로 저장한 뒤 올려 주세요.</div>
                   </div>
                 )}
               </>
@@ -139,7 +139,7 @@ export default function NewJob({ settings, onCancel, onDone, onSettings, notify 
               <>
                 <textarea
                   className="textarea paste"
-                  placeholder={'시험지 내용을 붙여 넣으세요.\n\n[1~2] 다음 글을 읽고 물음에 답하시오.\n1. 윗글의 내용과 일치하는 것은? [3점]\n① …\n② …'}
+                  placeholder={'학습자료 내용을 붙여 넣으세요.\n\n[1~2] 다음 글을 읽고 물음에 답하시오.\n1. 윗글의 내용과 일치하는 것은? [3점]\n① …\n② …'}
                   value={text}
                   onChange={(e) => setText(e.target.value)}
                 />
@@ -156,7 +156,7 @@ export default function NewJob({ settings, onCancel, onDone, onSettings, notify 
           <div className="card-h">변환 설정</div>
           <div className="card-b">
             <div className="field">
-              <label>시험지 이름</label>
+              <label>학습자료 이름</label>
               <input className="input" value={title} placeholder="예) 2026 2학기 중간고사 영어Ⅱ" onChange={(e) => setTitle(e.target.value)} />
             </div>
             <div className="field">
@@ -198,7 +198,7 @@ export default function NewJob({ settings, onCancel, onDone, onSettings, notify 
                 </div>
                 <div className="hint">
                   {handwriting === 'ignore'
-                    ? '풀이 흔적·체크·동그라미가 있는 시험지도 인쇄된 내용만 깔끔하게 옮깁니다.'
+                    ? '풀이 흔적·체크·동그라미가 있는 학습자료도 인쇄된 내용만 깔끔하게 옮깁니다.'
                     : '손으로 쓴 시험 원안을 타이핑합니다. 흐린 글자는 [?] 와 ‘확인 필요’로 표시해 드립니다.'}
                 </div>
               </div>

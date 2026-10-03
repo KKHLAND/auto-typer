@@ -133,7 +133,7 @@ export async function convert({ files = [], text = '', settings, title, onProgre
     }
   }
 
-  const doc = docFromJson ?? newDoc(title || '새 시험지');
+  const doc = docFromJson ?? newDoc(title || '새 학습자료');
   if (!docFromJson || blocks.length) doc.items = [...(docFromJson?.items ?? []), ...assemble(blocks)];
   if (title) doc.title = title;
   onProgress({ stage: 'done', message: `문항 ${doc.items.filter((x) => x.kind === 'question').length}개를 찾았습니다` });

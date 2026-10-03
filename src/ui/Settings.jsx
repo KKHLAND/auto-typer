@@ -39,7 +39,7 @@ export default function Settings({ settings, setSettings, notify, tab: initialTa
       {tab === 'ai' && (
         <div className="settings-grid">
           <div className="notice-box">
-            스캔본·사진·손글씨 시험지는 Google 의 <b>Gemini</b> 가 읽습니다. 선생님 본인의 무료 키를 쓰므로 이 앱에는 비용이 없고,
+            스캔본·사진·손글씨 학습자료는 Google 의 <b>Gemini</b> 가 읽습니다. 선생님 본인의 무료 키를 쓰므로 이 앱에는 비용이 없고,
             요청은 이 브라우저에서 Google 로 <b>직접</b> 갑니다. 무료 사용량 안에서는 결제가 일어나지 않습니다.
           </div>
           <div className="kv">
@@ -101,12 +101,12 @@ export default function Settings({ settings, setSettings, notify, tab: initialTa
             AI 인식을 켜면 해당 쪽 이미지가 선생님 키로 Google 에 보내지므로, 학생 개인정보가 들어간 답안지는 AI 인식에 쓰지 마세요.
           </div>
           <div className="kv">
-            <div className="k">이 컴퓨터의 자료 지우기<small>모든 시험지·양식·설정을 지웁니다.</small></div>
+            <div className="k">이 컴퓨터의 자료 지우기<small>모든 학습자료·양식·설정을 지웁니다.</small></div>
             <div>
               <button
                 className="btn danger"
                 onClick={async () => {
-                  if (!confirm('이 브라우저에 저장된 모든 시험지·양식·설정을 지울까요? 되돌릴 수 없습니다.')) return;
+                  if (!confirm('이 브라우저에 저장된 모든 학습자료·양식·설정을 지울까요? 되돌릴 수 없습니다.')) return;
                   localStorage.clear();
                   await new Promise((r) => { const q = indexedDB.deleteDatabase('auto-typer'); q.onsuccess = q.onerror = q.onblocked = r; });
                   location.reload();

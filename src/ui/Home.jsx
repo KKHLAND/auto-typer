@@ -26,7 +26,7 @@ export default function Home({ projects, onOpen, onNew, onSample, onDelete }) {
       <div className="crumb">내 스페이스</div>
       <div className="page-title">
         <span className="sq" style={{ background: '#7a5af8' }} />
-        <h1>내 시험지</h1>
+        <h1>내 학습자료</h1>
         <div className="acts">
           <button className="btn" onClick={onSample}>예제로 둘러보기</button>
           <button className="btn primary" onClick={onNew}>
@@ -39,7 +39,7 @@ export default function Home({ projects, onOpen, onNew, onSample, onDelete }) {
         <>
           <div className="hero">
             <div className="hero-card">
-              <h3>시험지를 올리면, 원하는 학교 양식의 한글 파일로.</h3>
+              <h3>학습자료를 올리면, 원하는 학교 양식의 한글 파일로.</h3>
               <p>
                 PDF·스캔본·손글씨 원안·hwpx·텍스트를 올리거나 붙여 넣으세요. 문항·지문·선지·&lt;보기&gt;·밑줄·수식을 나눠 읽고,
                 고른 양식(원묵고 정기고사, 수능형, 또는 직접 올린 hwpx)으로 다시 조판해 <b>hwpx</b> 와 <b>PDF</b> 로 내려받습니다.
@@ -61,7 +61,7 @@ export default function Home({ projects, onOpen, onNew, onSample, onDelete }) {
           </div>
           <div className="empty">
             <Ic.Upload size={34} />
-            <h2>첫 시험지를 변환해 보세요</h2>
+            <h2>첫 학습자료를 변환해 보세요</h2>
             <p>회원가입도, 페이지 제한도 없습니다.</p>
             <div className="formats">
               {['PDF', '스캔·손글씨', 'HWPX', 'TXT', 'MD', 'JSON', '이미지', '붙여넣기'].map((f) => (
@@ -76,7 +76,7 @@ export default function Home({ projects, onOpen, onNew, onSample, onDelete }) {
         <table className="table">
           <thead>
             <tr>
-              <th>시험지 이름</th>
+              <th>학습자료 이름</th>
               <th>양식</th>
               <th>문항</th>
               <th>검토 진척</th>

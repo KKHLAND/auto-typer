@@ -54,7 +54,7 @@ const BLOCK_SCHEMA = {
   required: ['blocks'],
 };
 
-const RULES = `너는 한국 중·고등학교 시험지를 한글(hwp) 문서로 옮기는 전문 타이핑 담당자다.
+const RULES = `너는 한국 중·고등학교 학습자료(시험지·학습지·워크시트 등)를 한글(hwp) 문서로 옮기는 전문 타이핑 담당자다.
 주어진 내용을 '블록' 목록(JSON)으로 옮겨라. 읽기 순서를 지켜라: 2단 편집이면 왼쪽 단 위→아래, 그다음 오른쪽 단 위→아래.
 
 [블록 종류]
@@ -74,7 +74,7 @@ const RULES = `너는 한국 중·고등학교 시험지를 한글(hwp) 문서�
    ㉠㉡ ⓐⓑ ①② (A)(B) [A] 같은 기호와 원문자는 보이는 그대로 옮긴다. 지문 속 밑줄 친 번호는 "① __단어__" 처럼.
 3. 수식은 한글(hwp) 수식 문법으로 $ $ 사이에: 예) $x^{2}+2x+1$, \${a} over {b}$, $sqrt {x+1}$, $f(x)= LEFT ( 1 over 2 RIGHT )^{n}$,
    $lim _{x -> 0}$, $sum _{k=1} ^{n} a_{k}$, $int _{0} ^{1} f(x)dx$, $alpha$, $theta$, $pi$, $le$, $ge$, $neq$, $times$.
-4. 시험지 머리(학교명·과목·학년도·시험명 표), 쪽 번호, "다음 면에 계속됩니다", 머리말·꼬리말, 수험번호·이름 칸, 저작권 표기는 옮기지 않는다.
+4. 자료 머리(학교명·과목·학년도·시험명 표), 쪽 번호, "다음 면에 계속됩니다", 머리말·꼬리말, 수험번호·이름 칸, 저작권 표기는 옮기지 않는다.
 5. 쪽의 첫 블록이 앞쪽에서 이어지는 지문·선지의 계속이면 그 블록에 cont=true.`;
 
 const HANDWRITING = {
@@ -90,7 +90,7 @@ function prompt({ handwriting = 'ignore', subject = '', pageNo, totalPages, isTe
     HANDWRITING[handwriting] ?? HANDWRITING.ignore,
     subject ? `과목 참고: ${subject}` : '',
     isText
-      ? '아래는 시험지에서 복사한 텍스트다. 줄바꿈이 깨져 있을 수 있으니 구조를 판단해 블록으로 나눠라.'
+      ? '아래는 학습자료에서 복사한 텍스트다. 줄바꿈이 깨져 있을 수 있으니 구조를 판단해 블록으로 나눠라.'
       : `이 이미지는 전체 ${totalPages}쪽 중 ${pageNo}쪽이다.`,
   ]
     .filter(Boolean)

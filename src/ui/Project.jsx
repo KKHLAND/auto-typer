@@ -65,7 +65,7 @@ export default function Project({ record, pages, onSave, onBack, notify }) {
     update({ ...doc, items: arr });
   };
 
-  const fileName = (ext) => `${(doc.title || '시험지').replace(/[\\/:*?"<>|]/g, '_')}.${ext}`;
+  const fileName = (ext) => `${(doc.title || '학습자료').replace(/[\\/:*?"<>|]/g, '_')}.${ext}`;
 
   const downloadHwpx = async () => {
     try {
@@ -103,7 +103,7 @@ export default function Project({ record, pages, onSave, onBack, notify }) {
     <>
       <div className="content">
         <div className="crumb">
-          <button onClick={onBack}>내 스페이스</button> › <span>{rec.sourceName || '시험지'}</span>
+          <button onClick={onBack}>내 스페이스</button> › <span>{rec.sourceName || '학습자료'}</span>
         </div>
         <div className="page-title">
           <span className="sq" style={{ background: rec.color }} />

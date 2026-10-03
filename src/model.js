@@ -15,7 +15,7 @@ export const CHOICE_MARKS = ['①', '②', '③', '④', '⑤', '⑥', '⑦'];
 let seq = 0;
 export const uid = () => `i${Date.now().toString(36)}${(seq++).toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
-export function newDoc(title = '새 시험지') {
+export function newDoc(title = '새 학습자료') {
   return { schema: 'exam-doc/v1', title, templateId: 'wonmook', headerEdits: {}, items: [] };
 }
 
@@ -163,7 +163,7 @@ export function assemble(blocks) {
 /** 다른 앱·이전 형식 JSON 을 최대한 받아 준다 */
 export function importJson(obj) {
   if (obj?.schema === 'exam-doc/v1' && Array.isArray(obj.items)) return obj;
-  const doc = newDoc(obj?.title || '가져온 시험지');
+  const doc = newDoc(obj?.title || '가져온 학습자료');
   const list = Array.isArray(obj) ? obj : obj?.items || obj?.questions || obj?.blocks || [];
   if (list.length && list[0]?.type && !list[0]?.kind) {
     doc.items = assemble(list);

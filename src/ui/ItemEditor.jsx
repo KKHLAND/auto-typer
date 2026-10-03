@@ -117,7 +117,7 @@ export default function ItemEditor({ item, label, pageImage, onChange, onClose, 
               </div>
               <div className="prop">
                 <span className="k">정답</span>
-                <input className="input" value={item.answer} placeholder="예) ③ (시험지에는 찍히지 않아요)" onChange={(e) => set({ answer: e.target.value })} />
+                <input className="input" value={item.answer} placeholder="예) ③ (학습자료에는 찍히지 않아요)" onChange={(e) => set({ answer: e.target.value })} />
               </div>
             </>
           )}
