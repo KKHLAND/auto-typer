@@ -5,8 +5,8 @@ import { all, put, del } from './store.js';
 export const BUILTIN = [
   {
     id: 'wonmook',
-    name: '원묵고등학교 정기고사',
-    desc: 'A4 · 2단 · 학교 머리 표 · 자동 쪽 번호',
+    name: '표준 2단 학습지 / 시험지 (샘플)',
+    desc: 'A4 · 2단 분할 · 학교 머리표 · 자동 쪽번호 (원묵고 서식 기반)',
     paper: 'A4',
     theme: 'wonmook',
     color: '#2f6bff',
@@ -15,8 +15,8 @@ export const BUILTIN = [
   },
   {
     id: 'suneung',
-    name: '대학수학능력시험형',
-    desc: 'B4 · 2단 · 교시·영역 머리 · 홀짝 쪽 머리말',
+    name: 'B4 대형 학습지 / 모의평가형 (샘플)',
+    desc: 'B4 · 2단 · 영역·과목 머리말 (수능 서식 기반)',
     paper: 'B4',
     theme: 'suneung',
     color: '#111827',

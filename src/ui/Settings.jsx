@@ -83,10 +83,10 @@ export default function Settings({ settings, setSettings, notify, tab: initialTa
             </div>
           </div>
           <div className="kv">
-            <div className="k">필기 처리 기본값</div>
+            <div className="k">손글씨 처리 기본값</div>
             <div className="seg">
+              <button className={settings.handwriting !== 'ignore' ? 'on' : ''} onClick={() => setSettings({ ...settings, handwriting: 'include' })}>손글씨 그대로 정리</button>
               <button className={settings.handwriting === 'ignore' ? 'on' : ''} onClick={() => setSettings({ ...settings, handwriting: 'ignore' })}>인쇄 내용만</button>
-              <button className={settings.handwriting === 'include' ? 'on' : ''} onClick={() => setSettings({ ...settings, handwriting: 'include' })}>손글씨도 타이핑</button>
             </div>
           </div>
         </div>

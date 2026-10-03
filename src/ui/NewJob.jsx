@@ -13,7 +13,7 @@ export default function NewJob({ settings, onCancel, onDone, onSettings, notify 
   const [templates, setTemplates] = useState([]);
   const [templateId, setTemplateId] = useState('wonmook');
   const [engine, setEngine] = useState(settings.engine || 'auto');
-  const [handwriting, setHandwriting] = useState(settings.handwriting || 'ignore');
+  const [handwriting, setHandwriting] = useState(settings.handwriting || 'include');
   const [drag, setDrag] = useState(false);
   const [running, setRunning] = useState(false);
   const [log, setLog] = useState([]);
@@ -31,7 +31,6 @@ export default function NewJob({ settings, onCancel, onDone, onSettings, notify 
   };
 
   const needsAi = files.some((f) => ['image'].includes(fileKind(f.name)));
-  const hasPdf = files.some((f) => fileKind(f.name) === 'pdf');
   const canStart = (files.length || text.trim()) && !running;
 
   const start = async () => {
@@ -103,10 +102,10 @@ export default function NewJob({ settings, onCancel, onDone, onSettings, notify 
                     addFiles(e.dataTransfer.files);
                   }}
                 >
-                  <Ic.Upload size={30} />
-                  <h2 style={{ fontSize: 16 }}>파일을 끌어다 놓거나 골라 주세요</h2>
+                  <Ic.Upload size={40} />
+                  <h2>파일을 끌어다 놓거나 골라 주세요</h2>
                   <p>PDF(스캔본·손글씨 포함) · HWPX · TXT · MD · JSON · 사진(JPG·PNG)</p>
-                  <button className="btn primary" onClick={() => input.current.click()}>파일 고르기</button>
+                  <button className="btn primary lg" onClick={() => input.current.click()}>파일 고르기</button>
                   <input
                     ref={input}
                     type="file"
@@ -139,7 +138,7 @@ export default function NewJob({ settings, onCancel, onDone, onSettings, notify 
               <>
                 <textarea
                   className="textarea paste"
-                  placeholder={'학습자료 내용을 붙여 넣으세요.\n\n[1~2] 다음 글을 읽고 물음에 답하시오.\n1. 윗글의 내용과 일치하는 것은? [3점]\n① …\n② …'}
+                  placeholder={'수업 자료·학습지·필기 내용을 붙여 넣으세요.\n\n[1~2] 다음 글을 읽고 물음에 답하시오.\n1. 윗글의 내용과 일치하는 것은? [3점]\n① …\n② …'}
                   value={text}
                   onChange={(e) => setText(e.target.value)}
                 />
@@ -170,7 +169,7 @@ export default function NewJob({ settings, onCancel, onDone, onSettings, notify 
                   </button>
                 ))}
               </div>
-              <div className="hint">양식은 나중에도 바꿀 수 있습니다. 우리 학교 양식은 [양식] 메뉴에서 hwpx 로 올리세요.</div>
+              <div className="hint">원묵고·수능 양식은 학교 2단·B4 서식 샘플입니다. 우리 학교 전용 양식이나 맞춤 서식은 [양식] 메뉴에서 HWPX로 올려 자유롭게 적용할 수 있습니다.</div>
             </div>
             <div className="field">
               <span className="lab">인식 방식</span>
@@ -184,33 +183,31 @@ export default function NewJob({ settings, onCancel, onDone, onSettings, notify 
                 ))}
               </div>
               <div className="hint">
-                {engine === 'auto' && '글자가 들어 있는 파일은 규칙으로 빠르게, 스캔본·사진·손글씨는 AI 로 읽습니다. (키가 있으면 PDF 도 AI 로 — 밑줄·상자까지 더 정확)'}
-                {engine === 'ai' && '모든 입력을 AI(Gemini)가 쪽마다 눈으로 읽듯 인식합니다. 밑줄·<보기> 상자·수식·그림까지 가장 정확합니다.'}
-                {engine === 'rules' && 'AI 없이 문항 번호·①~⑤·[1~3] 같은 표지로만 나눕니다. 키가 없어도 되고 아주 빠르지만, PDF 의 밑줄은 잃습니다.'}
+                {engine === 'auto' && '글자가 있는 문서는 규칙으로 빠르게, 스캔본·사진·손글씨는 AI로 빠르고 정확하게 구조화합니다.'}
+                {engine === 'ai' && '모든 자료를 AI가 쪽마다 읽어 밑줄·상자·수식·그림까지 살려 정리합니다.'}
+                {engine === 'rules' && 'AI 없이 번호·①~⑤·[1~3] 같은 표지로 즉시 나눕니다. 인터넷이 없어도 됩니다.'}
               </div>
             </div>
-            {(hasPdf || needsAi || engine === 'ai') && (
-              <div className="field">
-                <span className="lab">필기·손글씨</span>
-                <div className="seg">
-                  <button className={handwriting === 'ignore' ? 'on' : ''} onClick={() => setHandwriting('ignore')}>필기는 지우고 인쇄 내용만</button>
-                  <button className={handwriting === 'include' ? 'on' : ''} onClick={() => setHandwriting('include')}>손글씨 원안도 타이핑</button>
-                </div>
-                <div className="hint">
-                  {handwriting === 'ignore'
-                    ? '풀이 흔적·체크·동그라미가 있는 학습자료도 인쇄된 내용만 깔끔하게 옮깁니다.'
-                    : '손으로 쓴 시험 원안을 타이핑합니다. 흐린 글자는 [?] 와 ‘확인 필요’로 표시해 드립니다.'}
-                </div>
+            <div className="field">
+              <span className="lab">손글씨</span>
+              <div className="seg">
+                <button className={handwriting === 'include' ? 'on' : ''} onClick={() => setHandwriting('include')}>손글씨 그대로 정리</button>
+                <button className={handwriting === 'ignore' ? 'on' : ''} onClick={() => setHandwriting('ignore')}>인쇄 내용만</button>
               </div>
-            )}
+              <div className="hint">
+                {handwriting === 'include'
+                  ? '손으로 쓴 판서·필기·원고를 빠르게 읽어 내용 그대로 깔끔한 문서로 정리합니다. 흐린 글자는 ‘확인 필요’로 표시합니다.'
+                  : '풀이 흔적·체크·낙서가 있는 자료도 인쇄된 내용만 옮깁니다.'}
+              </div>
+            </div>
             {!settings.apiKey && (engine === 'ai' || needsAi) && (
               <div className="notice-box" style={{ marginBottom: 12 }}>
                 AI 인식에는 선생님 본인의 <b>무료 Gemini API 키</b>가 필요합니다. 1분이면 받을 수 있어요.{' '}
                 <button className="btn sm" onClick={onSettings}><Ic.Key size={13} /> 키 넣으러 가기</button>
               </div>
             )}
-            <button className="btn primary" style={{ width: '100%', height: 40, justifyContent: 'center' }} disabled={!canStart} onClick={start}>
-              {running ? <><span className="spin" style={{ borderColor: 'rgba(255,255,255,.4)', borderTopColor: '#fff' }} /> 변환 중…</> : <><Ic.Sparkle size={16} /> 변환 시작</>}
+            <button className="btn-start" disabled={!canStart} onClick={start}>
+              {running ? <><span className="spin" style={{ borderColor: 'rgba(255,255,255,.4)', borderTopColor: '#fff' }} /> 변환 중…</> : <><Ic.Sparkle size={20} /> 변환 시작</>}
             </button>
             {running && (
               <button className="btn ghost" style={{ width: '100%', justifyContent: 'center', marginTop: 6 }} onClick={() => abort.current?.abort()}>

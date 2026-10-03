@@ -84,34 +84,39 @@ export default function App() {
 
   return (
     <div className="app">
-      <header className="topbar">
-        <div className="brand">
-          <Ic.Logo />
-          auto-typer
-          <small>학습자료 타이핑·양식 변환</small>
+      <header className="masthead">
+        <span className="streak a" />
+        <span className="streak b" />
+        <div className="mh-left">
+          <div className="mh-row">
+            <svg className="mh-logo" viewBox="0 0 56 56" aria-hidden="true">
+              <path d="M28 4 52 28 28 52 4 28Z" fill="#fff" />
+              <path d="M19 22h18M19 28h18M19 34h12" stroke="#0b86f3" strokeWidth="3.2" strokeLinecap="round" fill="none" />
+            </svg>
+            <h1>Auto-typer</h1>
+            <span className="mh-badge">에듀테크 표준 양식</span>
+          </div>
+          <p>스캔본·사진·손글씨·PDF 학습자료를 원하는 학교 양식의 HWPX·PDF로 즉시 변환</p>
         </div>
-        <span className="free-badge">선생님 무료</span>
-        <div className="spacer" />
-        {!settings.apiKey && (
-          <button className="btn sm" onClick={() => setView({ name: 'settings' })}>
-            <Ic.Key size={14} /> AI 인식 켜기
+        <div className="mh-right">
+          {!settings.apiKey && (
+            <button className="mh-key" onClick={() => setView({ name: 'settings' })} title="손글씨·스캔본 AI 인식 켜기">
+              <Ic.Key size={18} /> <span>AI 인식 켜기</span>
+            </button>
+          )}
+          <button className="mh-btn" aria-label="설정" title="설정" onClick={() => setView({ name: 'settings' })}>
+            <Ic.Gear size={28} />
           </button>
-        )}
-        <button className="icon-btn" title="도움말" onClick={() => setView({ name: 'settings', tab: 'help' })}>
-          <Ic.Help />
-        </button>
-        <button className="icon-btn" title="설정" onClick={() => setView({ name: 'settings' })}>
-          <Ic.Gear />
-        </button>
+        </div>
       </header>
 
-      <nav className="rail">
-        <button className="plus" title="새 변환" onClick={() => setView({ name: 'new' })}>
-          <Ic.Plus />
+      <nav className="rail" aria-label="주 메뉴">
+        <button className="plus" title="새 변환" aria-label="새 변환" onClick={() => setView({ name: 'new' })}>
+          <Ic.Plus size={26} />
         </button>
         {nav.map((n) => (
           <button key={n.key} className={`rail-item ${active === n.key ? 'on' : ''}`} onClick={() => setView({ name: n.key })}>
-            <n.icon size={19} />
+            <n.icon size={26} />
             {n.label}
           </button>
         ))}

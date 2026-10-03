@@ -41,12 +41,12 @@ export default function Home({ projects, onOpen, onNew, onSample, onDelete }) {
             <div className="hero-card">
               <h3>학습자료를 올리면, 원하는 학교 양식의 한글 파일로.</h3>
               <p>
-                PDF·스캔본·손글씨 원안·hwpx·텍스트를 올리거나 붙여 넣으세요. 문항·지문·선지·&lt;보기&gt;·밑줄·수식을 나눠 읽고,
-                고른 양식(원묵고 정기고사, 수능형, 또는 직접 올린 hwpx)으로 다시 조판해 <b>hwpx</b> 와 <b>PDF</b> 로 내려받습니다.
+                수업 자료·학습지·판서 사진·손글씨 필기·PDF·hwpx·텍스트를 올리거나 붙여 넣으세요. 손글씨도 빠르게 읽어 내용 그대로 정리하고,
+                제목·지문·문항·&lt;보기&gt;·밑줄·수식을 살려 <b>원하는 양식</b>(우리 학교 hwpx, 또는 샘플 양식)의 <b>hwpx</b> 와 <b>PDF</b> 로 만듭니다.
               </p>
               <div className="steps">
                 <span className="step"><b>1</b>올리기</span>
-                <span className="step"><b>2</b>문항 검토</span>
+                <span className="step"><b>2</b>내용 검토</span>
                 <span className="step"><b>3</b>양식 고르기</span>
                 <span className="step"><b>4</b>hwpx · PDF</span>
               </div>

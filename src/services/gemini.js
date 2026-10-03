@@ -80,14 +80,15 @@ const RULES = `너는 한국 중·고등학교 학습자료(시험지·학습지
 const HANDWRITING = {
   ignore: `6. 손으로 쓴 필기(풀이 흔적, 계산, 체크 표시, 동그라미·가위표, 펜으로 그은 밑줄, 메모, 낙서)는 모두 무시하고 인쇄된 내용만 옮긴다.
    펜으로 그은 밑줄은 인쇄 밑줄이 아니므로 __ __ 로 표시하지 않는다.`,
-  include: `6. 이 자료는 손으로 쓴 시험 원안일 수 있다. 손글씨도 시험 내용으로 보고 정확히 옮긴다.
-   단, 지운 흔적·줄 그어 지운 글자·연습 계산은 옮기지 않는다. 확신이 없는 글자는 [?] 와 uncertain=true.`,
+  include: `6. 이 자료에는 손으로 쓴 판서·필기·메모·원고가 들어 있을 수 있다. 손글씨도 학습 내용으로 보고 쓰인 그대로 빠짐없이 옮긴다.
+   글씨를 고치거나 문장을 다듬지 말고, 화살표·번호·들여쓰기로 표현된 순서와 위계는 문단과 번호로 살린다.
+   지운 흔적·줄 그어 지운 글자·연습 계산은 옮기지 않는다. 확신이 없는 글자는 [?] 와 uncertain=true.`,
 };
 
-function prompt({ handwriting = 'ignore', subject = '', pageNo, totalPages, isText }) {
+function prompt({ handwriting = 'include', subject = '', pageNo, totalPages, isText }) {
   return [
     RULES,
-    HANDWRITING[handwriting] ?? HANDWRITING.ignore,
+    HANDWRITING[handwriting] ?? HANDWRITING.include,
     subject ? `과목 참고: ${subject}` : '',
     isText
       ? '아래는 학습자료에서 복사한 텍스트다. 줄바꿈이 깨져 있을 수 있으니 구조를 판단해 블록으로 나눠라.'
