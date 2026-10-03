@@ -1,0 +1,9 @@
+node_modules/
+dist/
+# 테스트 산출물·시험지 표본(학교 기출 스캔본 등)은 올리지 않는다
+tests/out/
+tests/fixtures/
+# npm 설치 후 tools/copy-pdfjs-assets.mjs 가 자동 생성
+public/pdfjs/
+.claude/
+*.log
