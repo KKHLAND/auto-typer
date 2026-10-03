@@ -6,11 +6,11 @@ import { sampleDoc } from '../src/sampleDoc.js';
 
 mkdirSync('tests/out', { recursive: true });
 let fail = 0;
-for (const id of ['wonmook', 'suneung']) {
+for (const id of ['sample']) {
   const tpl = loadHwpx(readFileSync(`public/templates/${id}.hwpx`));
   const analysis = JSON.parse(readFileSync(`public/templates/${id}.profile.json`, 'utf8'));
   const ht = collectHeaderTexts(tpl);
-  const edits = { [ht[0].key]: ht[0].text + ' (수정됨)' };
+  const edits = { [ht[2].key]: '원묵고등학교', [ht[3].key]: '관계대명사 한눈에 정리 (수정됨)' };
   const bytes = buildHwpx(tpl, sampleDoc(), { analysis, headerEdits: edits });
   writeFileSync(`tests/out/${id}-sample.hwpx`, bytes);
   const files = unzipSync(bytes);

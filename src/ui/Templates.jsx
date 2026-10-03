@@ -3,7 +3,7 @@ import * as Ic from './icons.jsx';
 import { TplThumb } from './NewJob.jsx';
 import { addCustomTemplate, listTemplates, loadTemplate, removeCustomTemplate } from '../services/templates.js';
 
-const ROLE_NAMES = { stem: '발문', choice: '선지', passage: '지문', group: '묶음 지시문', number: '문항 번호', spacer: '빈 줄' };
+const ROLE_NAMES = { body: '본문', list: '목록', heading: '소제목' };
 
 export default function Templates({ notify }) {
   const [list, setList] = useState([]);
@@ -36,7 +36,7 @@ export default function Templates({ notify }) {
     try {
       const { analysis } = await addCustomTemplate(file);
       const s = analysis.stats;
-      notify(`양식을 배웠습니다: 발문 ${s.stem} · 선지 ${s.choice} · 지문 ${s.passage} 개의 서식 표본`);
+      notify(`양식을 배웠습니다: 문단 ${s.paragraphs}개에서 소제목 ${s.heading}단계 · 본문 · 목록 서식을 읽었습니다`);
       await refresh();
     } catch (e) {
       notify(`양식을 읽지 못했습니다: ${e.message}`, 'err');
@@ -59,9 +59,9 @@ export default function Templates({ notify }) {
       </div>
 
       <div className="notice-box green">
-        <b>우리 학교 양식을 쓰는 법</b> — 예전에 만든 시험지·학습지 hwpx 하나를 그대로 올리세요. 첫 쪽의 머리 표·머리말·바닥글·쪽 크기·단 설정은 그대로 두고,
-        본문에서 발문·지문·선지·묶음 지시문이 각각 어떤 글자 모양·문단 모양을 쓰는지 배워 새 학습자료에 똑같이 입힙니다.
-        시험 문항 내용은 저장하지 않고 서식만 남깁니다.
+        <b>원하는 양식을 쓰는 법</b> — 이런 모양으로 만들고 싶은 hwpx(학습지·수업 자료·시험지 무엇이든) 하나를 그대로 올리세요.
+        첫 쪽의 머리 표·머리말·바닥글·쪽 크기·단 설정은 그대로 두고, 본문의 소제목·본문·목록이 쓰는 글꼴·크기·들여쓰기를 배워
+        읽은 내용을 그 모양에 그대로 담습니다. 올린 양식의 내용은 저장하지 않고 서식만 남깁니다.
       </div>
 
       <div className="tpl-cards">
@@ -75,10 +75,13 @@ export default function Templates({ notify }) {
                 <span>{t.desc}</span>
                 {a && (
                   <div className="roles" style={{ marginTop: 4 }}>
-                    {Object.entries(a.stats)
-                      .filter(([k, v]) => v && ROLE_NAMES[k] && k !== 'spacer')
-                      .map(([k]) => <span key={k} className="chip green"><Ic.Check size={11} /> {ROLE_NAMES[k]}</span>)}
-                    {a.profile.stemAutoNumber && <span className="chip blue">자동 번호 양식</span>}
+                    {Object.entries(ROLE_NAMES).map(([k, label]) => (
+                      a.stats?.[k] ? (
+                        <span key={k} className="chip green"><Ic.Check size={11} /> {label} 서식</span>
+                      ) : (
+                        <span key={k} className="chip gray" title="양식에 없어 본문 서식에서 만들어 씁니다">{label} 자동</span>
+                      )
+                    ))}
                   </div>
                 )}
               </div>

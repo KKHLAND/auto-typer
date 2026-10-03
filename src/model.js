@@ -1,185 +1,151 @@
-// 시험지 문서 모델 (exam-doc/v1)
+// 학습자료 문서 모델 (study-doc/v2)
 //
-// doc = { schema, title, templateId, headerEdits:{[templateId]:{[key]:text}}, items:[...] }
+// 원칙: 읽은 내용을 '그대로' 옮긴다. 번호·기호·배점 같은 글자는 원문에 있는 그대로 text 안에 둔다.
+// 앱은 내용을 고치거나 번호를 새로 매기지 않고, 블록의 '종류'만 정해 양식의 서식을 입힌다.
 //
-// item.kind
-//   'group'    공통 지문 묶음:  { instruction:'[1~3] 다음 글을 읽고…', passage, figure }
-//   'question' 문항:           { answerType:'choice'|'short'|'essay', stem, points, passage,
-//                               box:{title,text}|null, figure:{src,w,h}|null, choices:[], answer, note }
-//   'text'     자유 문단:       { text }   (예: '서답형' 같은 구역 제목)
+// doc = { schema, title, templateId, headerEdits:{[templateId]:{[key]:text}}, blocks:[...] }
 //
-// 텍스트 필드는 모두 markup.js 의 인라인 표기를 쓴다.
+// block.type
+//   'title'      자료 제목(한 줄)
+//   'heading'    소제목            { level: 1|2|3 }
+//   'paragraph'  본문 문단          (text 안의 줄바꿈 = 문단 나눔)
+//   'list'       목록 한 항목       { level: 1|2|3 }  — 번호·기호(1. ① • 가.)는 text 맨 앞에 원문 그대로
+//   'box'        상자(보기·참고·요약) { title }
+//   'table'      표                { rows: string[][] }  첫 행 = 머리 행
+//   'figure'     그림              { figure:{src,w,h}, text = 설명(선택) }
+//
+// 공통: id, text, flag('todo'|'check'|'done'), page(원본 쪽, 0부터)
+// 텍스트는 markup.js 의 인라인 표기(__밑줄__ **굵게** $수식$ [빈칸])를 쓴다.
 
-export const CHOICE_MARKS = ['①', '②', '③', '④', '⑤', '⑥', '⑦'];
+export const BLOCK_TYPES = ['title', 'heading', 'paragraph', 'list', 'box', 'table', 'figure'];
+
+export const TYPE_LABEL = {
+  title: '자료 제목',
+  heading: '소제목',
+  paragraph: '문단',
+  list: '목록',
+  box: '상자',
+  table: '표',
+  figure: '그림',
+};
 
 let seq = 0;
-export const uid = () => `i${Date.now().toString(36)}${(seq++).toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+export const uid = () => `b${Date.now().toString(36)}${(seq++).toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
 export function newDoc(title = '새 학습자료') {
-  return { schema: 'exam-doc/v1', title, templateId: 'wonmook', headerEdits: {}, items: [] };
+  return { schema: 'study-doc/v2', title, templateId: 'sample', headerEdits: {}, blocks: [] };
 }
 
-export function newQuestion(p = {}) {
-  return {
-    id: uid(),
-    kind: 'question',
-    answerType: 'choice',
-    stem: '',
-    points: '',
-    passage: '',
-    box: null,
-    figure: null,
-    choices: ['', '', '', '', ''],
-    answer: '',
-    note: '',
-    flag: 'todo', // todo 검토 전 · check 확인 필요 · done 검토 완료
-    ...p,
-  };
+export function newBlock(type = 'paragraph', p = {}) {
+  const b = { id: uid(), type, text: '', flag: 'todo', ...p };
+  if (type === 'heading' || type === 'list') b.level = clampLevel(b.level);
+  if (type === 'box') b.title = b.title ?? '';
+  if (type === 'table') b.rows = Array.isArray(b.rows) && b.rows.length ? b.rows : [['', ''], ['', '']];
+  if (type === 'figure') b.figure = b.figure ?? null;
+  return b;
 }
 
-export function newGroup(p = {}) {
-  return { id: uid(), kind: 'group', instruction: '', passage: '', figure: null, flag: 'todo', ...p };
-}
-
-export function newText(p = {}) {
-  return { id: uid(), kind: 'text', text: '', flag: 'done', ...p };
-}
-
-/** 문항 번호 계산: 선택형은 1부터, 서답형은 별도로 1부터 */
-export function numberItems(items) {
-  let c = 0;
-  let s = 0;
-  const map = new Map();
-  for (const it of items) {
-    if (it.kind !== 'question') continue;
-    if (it.answerType === 'choice') map.set(it.id, { n: ++c, label: `${c}.` });
-    else map.set(it.id, { n: ++s, label: `[서답형 ${s}]` });
-  }
-  return map;
-}
+const clampLevel = (n) => Math.min(3, Math.max(1, Math.round(+n || 1)));
 
 /**
- * 평평한 블록 스트림 → 문서 항목.
- * AI 추출과 규칙 파서가 모두 이 블록 형식을 낸다.
- *   {type:'group'|'stem'|'passage'|'box'|'choice'|'figure'|'text'|'answer',
- *    text, number?, points?, title?, answerType?, figure?, cont?}
+ * AI·규칙 파서가 낸 블록 → 문서 블록.
+ *   {type, text, level?, title?, rows?, figure?, cont?, uncertain?, page?}
+ * cont=true 인 문단·목록·상자는 앞 블록(앞쪽에서 넘어온 같은 글)에 이어 붙인다.
  */
-export function assemble(blocks) {
-  const items = [];
-  let cur = null; // 현재 문항
-  let group = null; // 현재 묶음 (다음 문항 발문 전까지 지문을 받음)
-  let lastText = null; // 페이지 넘어 이어지는 텍스트 붙일 대상 {obj, key}
-
-  const appendTo = (obj, key, text, cont) => {
-    if (!text) return;
-    if (obj[key]) obj[key] += cont ? ' ' + text : '\n' + text;
-    else obj[key] = text;
-    lastText = { obj, key };
-  };
-
-  for (const b of blocks) {
-    const text = (b.text ?? '').trim();
-    const owner = () => cur || group;
-    if (b.uncertain && owner()) owner().flag = 'check';
-    if (b.cont && lastText && b.type !== 'stem' && b.type !== 'group' && b.type !== 'choice') {
-      lastText.obj[lastText.key] += (/[-­]$/.test(lastText.obj[lastText.key]) ? '' : ' ') + text;
+export function assemble(raw) {
+  const out = [];
+  for (const r of raw) {
+    let type = BLOCK_TYPES.includes(r.type) ? r.type : 'paragraph';
+    const text = String(r.text ?? '').trim();
+    const prev = out[out.length - 1];
+    if (r.cont && prev && prev.type === type && ['paragraph', 'list', 'box'].includes(type)) {
+      const joinNoSpace = /[-­]$/.test(prev.text);
+      prev.text = (joinNoSpace ? prev.text.replace(/[-­]$/, '') : prev.text + ' ') + text;
+      if (r.uncertain) prev.flag = 'check';
       continue;
     }
-    switch (b.type) {
-      case 'group':
-        group = newGroup({ instruction: text, page: b.page, flag: b.uncertain ? 'check' : 'todo' });
-        items.push(group);
-        cur = null;
-        lastText = { obj: group, key: 'instruction' };
-        break;
-      case 'stem':
-        cur = newQuestion({
-          stem: text,
-          points: b.points ? String(b.points) : '',
-          answerType: b.answerType || 'choice',
-          page: b.page,
-          flag: b.uncertain ? 'check' : 'todo',
-          choices: b.answerType && b.answerType !== 'choice' ? [] : ['', '', '', '', ''],
-        });
-        items.push(cur);
-        group = null;
-        lastText = { obj: cur, key: 'stem' };
-        break;
-      case 'passage':
-        if (cur && !cur.choices.some(Boolean)) appendTo(cur, 'passage', text, false);
-        else if (group && !cur) appendTo(group, 'passage', text, false);
-        else {
-          // 소속 없는 지문 → 새 묶음 시작 (지시문 없음)
-          group = newGroup({ passage: text, page: b.page });
-          items.push(group);
-          cur = null;
-          lastText = { obj: group, key: 'passage' };
-        }
-        break;
-      case 'box':
-        if (cur) {
-          cur.box = cur.box || { title: b.title || '<보기>', text: '' };
-          appendTo(cur.box, 'text', text, false);
-        } else if (group) appendTo(group, 'passage', text, false);
-        break;
-      case 'choice': {
-        if (!cur) {
-          cur = newQuestion({ stem: '' });
-          items.push(cur);
-        }
-        const filled = cur.choices.filter(Boolean).length;
-        const idx = b.number ? b.number - 1 : filled;
-        while (cur.choices.length <= idx) cur.choices.push('');
-        cur.choices[idx] = text;
-        lastText = { obj: cur.choices, key: idx };
-        break;
+    if (type === 'figure' && !r.figure?.src) {
+      // 잘라 낼 수 없는 그림은 설명 문단으로 남긴다
+      if (!text) continue;
+      type = 'paragraph';
+    }
+    if (type === 'table') {
+      const rows = (Array.isArray(r.rows) ? r.rows : []).map((row) => (Array.isArray(row) ? row.map((c) => String(c ?? '')) : [String(row)]));
+      if (!rows.length) {
+        if (text) out.push(newBlock('paragraph', { text, page: r.page, flag: r.uncertain ? 'check' : 'todo' }));
+        continue;
       }
-      case 'figure': {
-        const target = cur || group;
-        if (target && b.figure) target.figure = b.figure;
-        else if (b.figure) items.push(newGroup({ figure: b.figure }));
-        break;
-      }
-      case 'answer':
-        if (cur) cur.answer = text;
-        break;
-      default:
-        if (text) {
-          items.push(newText({ text }));
-          cur = null;
-          group = null;
-        }
+      const w = Math.max(...rows.map((x) => x.length));
+      rows.forEach((x) => { while (x.length < w) x.push(''); });
+      out.push(newBlock('table', { rows, text, page: r.page, flag: r.uncertain ? 'check' : 'todo' }));
+      continue;
+    }
+    if (!text && type !== 'figure') continue;
+    out.push(
+      newBlock(type, {
+        text,
+        level: r.level,
+        title: r.title,
+        figure: r.figure,
+        page: r.page,
+        flag: r.uncertain ? 'check' : 'todo',
+      }),
+    );
+  }
+  return out;
+}
+
+/** 예전 시험지형 문서(exam-doc/v1)를 학습자료 블록으로 바꾼다 — 글자는 그대로 */
+export function migrateDoc(doc) {
+  if (!doc || doc.schema === 'study-doc/v2' || !Array.isArray(doc.items)) return doc;
+  const blocks = [];
+  let n = 0;
+  let s = 0;
+  const flag = (it) => it.flag || 'todo';
+  const lines = (t) => String(t || '').split('\n').filter((x) => x.trim());
+  for (const it of doc.items) {
+    if (it.kind === 'text') blocks.push(newBlock('heading', { level: 2, text: it.text, flag: flag(it), page: it.page }));
+    else if (it.kind === 'group') {
+      if (it.instruction) blocks.push(newBlock('paragraph', { text: it.instruction, flag: flag(it), page: it.page }));
+      lines(it.passage).forEach((t) => blocks.push(newBlock('paragraph', { text: t, flag: flag(it), page: it.page })));
+      if (it.figure) blocks.push(newBlock('figure', { figure: it.figure, flag: flag(it), page: it.page }));
+    } else if (it.kind === 'question') {
+      const label = it.answerType === 'choice' ? `${++n}.` : `[서답형 ${++s}]`;
+      const pts = it.points ? ` [${String(it.points).replace(/점$/, '')}점]` : '';
+      blocks.push(newBlock('list', { level: 1, text: `${label} ${it.stem || ''}${pts}`.trim(), flag: flag(it), page: it.page }));
+      lines(it.passage).forEach((t) => blocks.push(newBlock('paragraph', { text: t, flag: flag(it), page: it.page })));
+      if (it.figure) blocks.push(newBlock('figure', { figure: it.figure, flag: flag(it), page: it.page }));
+      if (it.box && (it.box.text || it.box.title)) blocks.push(newBlock('box', { title: it.box.title || '', text: it.box.text || '', flag: flag(it), page: it.page }));
+      const marks = '①②③④⑤⑥⑦';
+      (it.choices || []).forEach((c, i) => {
+        if (c && c.trim()) blocks.push(newBlock('list', { level: 2, text: `${marks[i] ?? ''} ${c}`, flag: flag(it), page: it.page }));
+      });
     }
   }
-  // 빈 선지 꼬리 정리 (5개 미만 유지)
-  for (const it of items) {
-    if (it.kind === 'question' && it.answerType === 'choice') {
-      while (it.choices.length > 5 && !it.choices[it.choices.length - 1]) it.choices.pop();
-    }
-  }
-  return items;
+  const { items, ...rest } = doc;
+  return { ...rest, schema: 'study-doc/v2', blocks };
 }
 
 /** 다른 앱·이전 형식 JSON 을 최대한 받아 준다 */
 export function importJson(obj) {
-  if (obj?.schema === 'exam-doc/v1' && Array.isArray(obj.items)) return obj;
+  if (obj?.schema === 'study-doc/v2' && Array.isArray(obj.blocks)) return obj;
+  if (obj?.schema === 'exam-doc/v1') return migrateDoc(obj);
   const doc = newDoc(obj?.title || '가져온 학습자료');
-  const list = Array.isArray(obj) ? obj : obj?.items || obj?.questions || obj?.blocks || [];
-  if (list.length && list[0]?.type && !list[0]?.kind) {
-    doc.items = assemble(list);
-    return doc;
-  }
-  doc.items = list.map((q) => {
-    if (q.kind === 'group' || q.kind === 'text') return { ...q, id: uid() };
-    return newQuestion({
-      stem: q.stem ?? q.question ?? q.prompt ?? q.title ?? '',
-      passage: q.passage ?? q.text ?? q.body ?? '',
-      points: String(q.points ?? q.score ?? ''),
-      choices: q.choices ?? q.options ?? q.answers ?? ['', '', '', '', ''],
-      answer: String(q.answer ?? q.correct ?? ''),
-      box: q.box ?? (q.example ? { title: '<보기>', text: q.example } : null),
-      answerType: q.answerType ?? ((q.choices ?? q.options)?.length ? 'choice' : 'short'),
-    });
-  });
+  const list = Array.isArray(obj) ? obj : obj?.blocks || obj?.items || obj?.sections || [];
+  doc.blocks = assemble(
+    list.map((x) =>
+      typeof x === 'string'
+        ? { type: 'paragraph', text: x }
+        : { ...x, type: x.type || (x.rows ? 'table' : x.level ? 'heading' : 'paragraph'), text: x.text ?? x.content ?? x.body ?? '' },
+    ),
+  );
   return doc;
+}
+
+/** 원본 대조·미리보기용 순수 텍스트 한 줄 */
+export function blockSummary(b) {
+  if (b.type === 'table') return (b.rows || []).map((r) => r.join(' | ')).join(' / ');
+  if (b.type === 'figure') return b.text || '(그림)';
+  if (b.type === 'box') return [b.title, b.text].filter(Boolean).join(' — ');
+  return b.text;
 }

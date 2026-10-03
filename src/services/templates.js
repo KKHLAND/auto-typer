@@ -1,28 +1,24 @@
-// 양식 목록: 내장(원묵고·수능) + 선생님이 올린 양식
+// 양식 목록: 내장 샘플(A4 2단) + 선생님이 올린 양식
 import { loadHwpx, stripToTemplate, collectHeaderTexts, savePackage } from '../engine/hwpx.js';
 import { all, put, del } from './store.js';
 
 export const BUILTIN = [
   {
-    id: 'wonmook',
-    name: '표준 2단 학습지 / 시험지 (샘플)',
-    desc: 'A4 · 2단 분할 · 학교 머리표 · 자동 쪽번호 (원묵고 서식 기반)',
+    id: 'sample',
+    name: '2단 학습지 (샘플, A4)',
+    desc: 'A4 · 2단 · 머리: 학교명 | 학습 자료명 | 학번·이름 (수능 2단 서식 기반)',
     paper: 'A4',
-    theme: 'wonmook',
-    color: '#2f6bff',
-    // 머리 문구에 붙일 친절한 이름 (순서대로)
-    labels: ['학년도·학기', '시험명', '시험 날짜', '', '과목코드', '과목명', '바닥글(앞)', '바닥글(뒤)', '학년·과정', '선택형 안내', '단답형 안내', '시험지 면수', '확인 문구', '이어짐 안내(짝수쪽)', '이어짐 안내(홀수쪽)'],
-  },
-  {
-    id: 'suneung',
-    name: 'B4 대형 학습지 / 모의평가형 (샘플)',
-    desc: 'B4 · 2단 · 영역·과목 머리말 (수능 서식 기반)',
-    paper: 'B4',
-    theme: 'suneung',
-    color: '#111827',
-    labels: ['시험명', '영역(첫 쪽)', '전체 쪽 수', '영역(짝수쪽 머리)', '영역(홀수쪽 머리)', '교시'],
+    theme: 'sample',
+    color: '#1f6fff',
+    // 머리 문구 이름 (양식 속 순서대로)
+    labels: ['쪽 번호 앞', '쪽 번호 뒤', '학교명', '학습 자료명', '학번·이름'],
+    // 이 칸은 따로 고치지 않으면 학습자료 이름이 들어간다
+    titleIndex: 3,
   },
 ];
+
+/** 예전 내장 양식(원묵고·수능) 으로 만든 작업은 새 샘플 양식으로 연다 */
+export const LEGACY_IDS = ['wonmook', 'suneung'];
 
 const cache = new Map();
 
@@ -41,7 +37,7 @@ export async function loadTemplate(id) {
     entry = { meta: b, pkg, analysis, headerTexts: collectHeaderTexts(pkg) };
   } else {
     const t = (await all('templates')).find((x) => x.id === id);
-    if (!t) return loadTemplate('wonmook');
+    if (!t) return loadTemplate('sample');
     const pkg = loadHwpx(t.bytes);
     entry = { meta: t.meta, pkg, analysis: t.analysis, headerTexts: collectHeaderTexts(pkg) };
   }

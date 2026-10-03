@@ -11,7 +11,7 @@ export default function NewJob({ settings, onCancel, onDone, onSettings, notify 
   const [text, setText] = useState('');
   const [title, setTitle] = useState('');
   const [templates, setTemplates] = useState([]);
-  const [templateId, setTemplateId] = useState('wonmook');
+  const [templateId, setTemplateId] = useState('sample');
   const [engine, setEngine] = useState(settings.engine || 'auto');
   const [handwriting, setHandwriting] = useState(settings.handwriting || 'include');
   const [drag, setDrag] = useState(false);
@@ -51,13 +51,13 @@ export default function NewJob({ settings, onCancel, onDone, onSettings, notify 
             return [...next, { key, ...ev }].slice(-200);
           }),
       });
-      const q = res.doc.items.filter((x) => x.kind === 'question').length;
-      if (!res.doc.items.length) {
-        notify('문항을 하나도 찾지 못했습니다. 다른 인식 방식을 골라 보세요.', 'err');
+      const q = res.doc.blocks.length;
+      if (!q) {
+        notify('읽어 낸 내용이 없습니다. 다른 인식 방식을 골라 보세요.', 'err');
         setRunning(false);
         return;
       }
-      notify(`문항 ${q}개를 찾았습니다. 하나씩 검토해 주세요.`);
+      notify(`내용 ${q}덩이를 정리했습니다. 원본과 대조해 확인해 주세요.`);
       await onDone({ doc: res.doc, pages: res.pages, templateId, sourceName: files.map((f) => f.name).join(', ') || '붙여넣기', engineUsed: res.engineUsed });
     } catch (e) {
       if (e.name !== 'AbortError') notify(e.message || String(e), 'err');
@@ -138,7 +138,7 @@ export default function NewJob({ settings, onCancel, onDone, onSettings, notify 
               <>
                 <textarea
                   className="textarea paste"
-                  placeholder={'수업 자료·학습지·필기 내용을 붙여 넣으세요.\n\n[1~2] 다음 글을 읽고 물음에 답하시오.\n1. 윗글의 내용과 일치하는 것은? [3점]\n① …\n② …'}
+                  placeholder={'수업 자료·학습지·필기 내용을 붙여 넣으세요.\n\n# 단원 제목\n## 1. 소제목\n본문 문단은 빈 줄로 나눕니다.\n- 목록 항목\n① 번호 목록\n| 표 | 머리 |'}
                   value={text}
                   onChange={(e) => setText(e.target.value)}
                 />
@@ -169,7 +169,7 @@ export default function NewJob({ settings, onCancel, onDone, onSettings, notify 
                   </button>
                 ))}
               </div>
-              <div className="hint">원묵고·수능 양식은 학교 2단·B4 서식 샘플입니다. 우리 학교 전용 양식이나 맞춤 서식은 [양식] 메뉴에서 HWPX로 올려 자유롭게 적용할 수 있습니다.</div>
+              <div className="hint">기본 양식은 A4 2단 학습지 샘플입니다. 원하는 양식이 있으면 [양식] 메뉴에서 HWPX로 올려 그 모양 그대로 만들 수 있습니다.</div>
             </div>
             <div className="field">
               <span className="lab">인식 방식</span>
@@ -185,7 +185,7 @@ export default function NewJob({ settings, onCancel, onDone, onSettings, notify 
               <div className="hint">
                 {engine === 'auto' && '글자가 있는 문서는 규칙으로 빠르게, 스캔본·사진·손글씨는 AI로 빠르고 정확하게 구조화합니다.'}
                 {engine === 'ai' && '모든 자료를 AI가 쪽마다 읽어 밑줄·상자·수식·그림까지 살려 정리합니다.'}
-                {engine === 'rules' && 'AI 없이 번호·①~⑤·[1~3] 같은 표지로 즉시 나눕니다. 인터넷이 없어도 됩니다.'}
+                {engine === 'rules' && 'AI 없이 제목(#)·목록 기호·표 같은 모양만 보고 즉시 나눕니다. 인터넷이 없어도 됩니다.'}
               </div>
             </div>
             <div className="field">
@@ -240,18 +240,13 @@ export function TplThumb({ theme, color = '#1f6fff', big }) {
   return (
     <svg width={w} height={h} viewBox="0 0 46 64" aria-hidden="true">
       <rect x="0.5" y="0.5" width="45" height="63" rx="1.5" fill="#fff" stroke="#d5dae2" />
-      {theme === 'wonmook' && (
+      {theme === 'sample' && (
         <>
-          <rect x="4" y="4" width="38" height="8" fill="none" stroke="#111" strokeWidth=".7" />
-          <path d="M13 4v8M22 4v8M33 4v8" stroke="#111" strokeWidth=".5" />
-        </>
-      )}
-      {theme === 'suneung' && (
-        <>
-          <rect x="15" y="3" width="16" height="2" fill="#666" />
-          <rect x="15" y="7" width="16" height="4" fill="#111" />
-          <ellipse cx="8" cy="9" rx="4" ry="2" fill="none" stroke="#111" strokeWidth=".6" />
-          <path d="M4 13h38" stroke="#111" strokeWidth="1" />
+          <rect x="4" y="7" width="8" height="1.6" fill="#555" />
+          <rect x="15" y="5.5" width="16" height="4" fill="#111" />
+          <rect x="34" y="5" width="8" height="1.3" fill="#777" />
+          <rect x="34" y="8" width="8" height="1.3" fill="#777" />
+          <path d="M4 12.5h38" stroke="#111" strokeWidth="1" />
         </>
       )}
       {theme === 'generic' && <rect x="10" y="4" width="26" height="5" rx="1" fill={color} opacity=".8" />}

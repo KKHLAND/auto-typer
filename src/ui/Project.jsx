@@ -1,14 +1,20 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as Ic from './icons.jsx';
-import ItemEditor from './ItemEditor.jsx';
-import Preview, { printDoc, headerStrings } from './Preview.jsx';
+import BlockEditor from './ItemEditor.jsx';
+import Preview, { printDoc, headerStrings, effectiveEdits } from './Preview.jsx';
 import { reviewStats, StatusChip } from './Home.jsx';
 import { listTemplates, loadTemplate } from '../services/templates.js';
 import { buildHwpx } from '../engine/hwpx.js';
 import { plain } from '../engine/markup.js';
-import { newGroup, newQuestion, newText, numberItems } from '../model.js';
+import { blockSummary, newBlock, TYPE_LABEL } from '../model.js';
 
 const FLAG = { todo: ['검토 전', 'gray'], check: ['확인 필요', 'amber'], done: ['검토 완료', 'blue'] };
+
+export function typeChip(b) {
+  const label = b.type === 'heading' ? `소제목 ${b.level || 1}` : b.type === 'list' && (b.level || 1) > 1 ? `목록 ${b.level}` : TYPE_LABEL[b.type] || '문단';
+  const tone = b.type === 'title' || b.type === 'heading' ? 'blue' : b.type === 'box' || b.type === 'table' || b.type === 'figure' ? 'green' : 'gray';
+  return <span className={`chip ${tone}`}>{label}</span>;
+}
 
 export default function Project({ record, pages, onSave, onBack, notify }) {
   const [rec, setRec] = useState(record);
@@ -22,6 +28,7 @@ export default function Project({ record, pages, onSave, onBack, notify }) {
   const [pageCount, setPageCount] = useState(null);
   const saveT = useRef(null);
   const doc = rec.doc;
+  const blocks = doc.blocks || [];
 
   useEffect(() => {
     listTemplates().then(setTemplates);
@@ -39,30 +46,30 @@ export default function Project({ record, pages, onSave, onBack, notify }) {
   };
   useEffect(() => () => clearTimeout(saveT.current), []);
 
-  const nums = useMemo(() => numberItems(doc.items), [doc.items]);
+  const setBlocks = (bs) => update({ ...doc, blocks: bs });
   const stats = reviewStats(doc);
-  const items = doc.items.filter((it) => filter === 'all' || it.flag === filter);
-  const selItem = doc.items.find((x) => x.id === sel);
+  const shown = blocks.filter((b) => filter === 'all' || (b.flag ?? 'todo') === filter);
+  const selBlock = blocks.find((x) => x.id === sel);
 
-  const setItem = (it) => update({ ...doc, items: doc.items.map((x) => (x.id === it.id ? it : x)) });
-  const addItem = (it) => {
-    const idx = sel ? doc.items.findIndex((x) => x.id === sel) + 1 : doc.items.length;
-    const arr = [...doc.items];
-    arr.splice(idx, 0, it);
-    update({ ...doc, items: arr });
-    setSel(it.id);
+  const setBlock = (b) => setBlocks(blocks.map((x) => (x.id === b.id ? b : x)));
+  const addBlock = (b) => {
+    const idx = sel ? blocks.findIndex((x) => x.id === sel) + 1 : blocks.length;
+    const arr = [...blocks];
+    arr.splice(idx, 0, b);
+    setBlocks(arr);
+    setSel(b.id);
   };
-  const removeItem = (id) => {
-    update({ ...doc, items: doc.items.filter((x) => x.id !== id) });
+  const removeBlock = (id) => {
+    setBlocks(blocks.filter((x) => x.id !== id));
     setSel(null);
   };
-  const moveItem = (id, d) => {
-    const arr = [...doc.items];
+  const moveBlock = (id, d) => {
+    const arr = [...blocks];
     const i = arr.findIndex((x) => x.id === id);
     const j = i + d;
     if (j < 0 || j >= arr.length) return;
     [arr[i], arr[j]] = [arr[j], arr[i]];
-    update({ ...doc, items: arr });
+    setBlocks(arr);
   };
 
   const fileName = (ext) => `${(doc.title || '학습자료').replace(/[\\/:*?"<>|]/g, '_')}.${ext}`;
@@ -70,10 +77,9 @@ export default function Project({ record, pages, onSave, onBack, notify }) {
   const downloadHwpx = async () => {
     try {
       const e = entry ?? (await loadTemplate(rec.templateId));
-      const bytes = buildHwpx(e.pkg, doc, { analysis: e.analysis, headerEdits: doc.headerEdits?.[e.meta.id] });
+      const bytes = buildHwpx(e.pkg, doc, { analysis: e.analysis, headerEdits: effectiveEdits(e, doc) });
       const url = URL.createObjectURL(new Blob([bytes], { type: 'application/hwp+zip' }));
-      const a = Object.assign(document.createElement('a'), { href: url, download: fileName('hwpx') });
-      a.click();
+      Object.assign(document.createElement('a'), { href: url, download: fileName('hwpx') }).click();
       setTimeout(() => URL.revokeObjectURL(url), 4000);
       notify('hwpx 를 내려받았습니다. 한글에서 열어 확인해 주세요.');
     } catch (err) {
@@ -93,11 +99,9 @@ export default function Project({ record, pages, onSave, onBack, notify }) {
     setTimeout(() => URL.revokeObjectURL(url), 4000);
   };
 
-  const kindChip = (it) =>
-    it.kind === 'group' ? <span className="chip blue">묶음 지문</span> : it.kind === 'text' ? <span className="chip gray">구역 제목</span> : it.answerType === 'choice' ? <span className="chip gray">선택형</span> : <span className="chip gray">{it.answerType === 'essay' ? '서술형' : '단답형'}</span>;
-  const summary = (it) => plain(it.kind === 'question' ? it.stem || it.passage : it.kind === 'group' ? it.instruction || it.passage : it.text) || '(내용 없음)';
-
+  const summary = (b) => plain(blockSummary(b)) || '(내용 없음)';
   const tpl = templates.find((t) => t.id === rec.templateId);
+  const count = (f) => blocks.filter((x) => (x.flag ?? 'todo') === f).length;
 
   return (
     <>
@@ -107,10 +111,10 @@ export default function Project({ record, pages, onSave, onBack, notify }) {
         </div>
         <div className="page-title">
           <span className="sq" style={{ background: rec.color }} />
-          <input className="title-input" value={doc.title} onChange={(e) => update({ ...doc, title: e.target.value })} size={Math.max(8, doc.title.length + 2)} />
+          <input className="title-input" aria-label="학습자료 이름" value={doc.title} onChange={(e) => update({ ...doc, title: e.target.value })} size={Math.max(8, doc.title.length + 2)} />
           <StatusChip stats={stats} />
           <div className="acts">
-            <select className="select" style={{ width: 210, height: 32 }} value={rec.templateId} onChange={(e) => update({ ...doc, templateId: e.target.value }, { templateId: e.target.value })} title="양식">
+            <select className="select" style={{ width: 250, height: 38 }} value={rec.templateId} onChange={(e) => update({ ...doc, templateId: e.target.value }, { templateId: e.target.value })} aria-label="양식">
               {templates.map((t) => (
                 <option key={t.id} value={t.id}>양식: {t.name}</option>
               ))}
@@ -122,7 +126,7 @@ export default function Project({ record, pages, onSave, onBack, notify }) {
         </div>
 
         <div className="tabs">
-          <button className={`tab ${tab === 'list' ? 'on' : ''}`} onClick={() => setTab('list')}><Ic.List size={15} /> 리스트 <span className="count">{doc.items.length}</span></button>
+          <button className={`tab ${tab === 'list' ? 'on' : ''}`} onClick={() => setTab('list')}><Ic.List size={15} /> 내용 <span className="count">{blocks.length}</span></button>
           <button className={`tab ${tab === 'board' ? 'on' : ''}`} onClick={() => setTab('board')}><Ic.Board size={15} /> 검토 보드</button>
           {!!pages.length && <button className={`tab ${tab === 'source' ? 'on' : ''}`} onClick={() => setTab('source')}><Ic.Columns size={15} /> 원본 대조</button>}
           <button className={`tab ${tab === 'preview' ? 'on' : ''}`} onClick={() => setTab('preview')}><Ic.Eye size={15} /> 미리보기 {pageCount ? <span className="count">{pageCount}면</span> : null}</button>
@@ -132,21 +136,23 @@ export default function Project({ record, pages, onSave, onBack, notify }) {
           <div className="toolbar">
             {tab === 'list' &&
               [
-                ['all', `전체 ${doc.items.length}`],
-                ['check', `확인 필요 ${doc.items.filter((x) => x.flag === 'check').length}`],
-                ['todo', `검토 전 ${doc.items.filter((x) => x.flag === 'todo').length}`],
-                ['done', `검토 완료 ${doc.items.filter((x) => x.flag === 'done').length}`],
+                ['all', `전체 ${blocks.length}`],
+                ['check', `확인 필요 ${count('check')}`],
+                ['todo', `검토 전 ${count('todo')}`],
+                ['done', `검토 완료 ${count('done')}`],
               ].map(([k, l]) => (
                 <button key={k} className={`pill-btn ${filter === k ? 'on' : ''}`} onClick={() => setFilter(k)}>{l}</button>
               ))}
             {tab === 'list' && <span className="sep" />}
-            <button className="pill-btn" onClick={() => addItem(newQuestion())}><Ic.Plus size={13} /> 문항</button>
-            <button className="pill-btn" onClick={() => addItem(newGroup({ instruction: '[ ~ ] 다음 글을 읽고 물음에 답하시오.' }))}><Ic.Plus size={13} /> 묶음 지문</button>
-            <button className="pill-btn" onClick={() => addItem(newText({ text: '서답형' }))}><Ic.Plus size={13} /> 구역 제목</button>
+            <button className="pill-btn" onClick={() => addBlock(newBlock('heading', { level: 1, text: '소제목' }))}><Ic.Plus size={13} /> 소제목</button>
+            <button className="pill-btn" onClick={() => addBlock(newBlock('paragraph'))}><Ic.Plus size={13} /> 문단</button>
+            <button className="pill-btn" onClick={() => addBlock(newBlock('list', { text: '• ' }))}><Ic.Plus size={13} /> 목록</button>
+            <button className="pill-btn" onClick={() => addBlock(newBlock('box', { title: '' }))}><Ic.Plus size={13} /> 상자</button>
+            <button className="pill-btn" onClick={() => addBlock(newBlock('table'))}><Ic.Plus size={13} /> 표</button>
             <span className="sep" />
-            <button className="pill-btn" onClick={() => update({ ...doc, items: doc.items.map((x) => ({ ...x, flag: 'done' })) })}><Ic.Check size={13} /> 모두 검토 완료</button>
+            <button className="pill-btn" onClick={() => setBlocks(blocks.map((x) => ({ ...x, flag: 'done' })))}><Ic.Check size={13} /> 모두 검토 완료</button>
             <button className="pill-btn" onClick={exportJson}><Ic.Doc size={13} /> JSON</button>
-            <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--ink-3)' }}>
+            <span style={{ marginLeft: 'auto', fontSize: 13, color: 'var(--ink-3)' }}>
               {rec.engineUsed === 'ai' ? 'AI 인식' : '규칙 인식'} · 자동 저장
             </span>
           </div>
@@ -156,31 +162,34 @@ export default function Project({ record, pages, onSave, onBack, notify }) {
           <table className="table">
             <thead>
               <tr>
-                <th>번호</th>
                 <th>종류</th>
-                <th>내용</th>
-                <th>배점</th>
-                <th>정답</th>
+                <th>내용 (읽은 그대로)</th>
                 <th>원본</th>
                 <th>상태</th>
               </tr>
             </thead>
             <tbody>
-              {items.map((it) => (
-                <tr key={it.id} className={`row ${sel === it.id ? 'sel' : ''}`} onClick={() => setSel(it.id)}>
-                  <td className="num">{nums.get(it.id)?.label ?? ''}</td>
-                  <td style={{ width: 90 }}>{kindChip(it)}</td>
+              {shown.map((b) => (
+                <tr key={b.id} className={`row ${sel === b.id ? 'sel' : ''}`} onClick={() => setSel(b.id)}>
+                  <td style={{ width: 110 }}>{typeChip(b)}</td>
                   <td>
-                    <span className="ellipsis" style={{ fontWeight: it.kind === 'question' ? 500 : 400 }}>{summary(it)}</span>
+                    <span
+                      className="ellipsis"
+                      style={{
+                        fontWeight: b.type === 'title' || b.type === 'heading' ? 700 : 400,
+                        paddingLeft: b.type === 'list' ? ((b.level || 1) - 1) * 18 : 0,
+                        maxWidth: 760,
+                      }}
+                    >
+                      {summary(b)}
+                    </span>
                   </td>
-                  <td className="num">{it.points ? `${it.points}점` : ''}</td>
-                  <td className="num">{it.answer || ''}</td>
-                  <td className="num muted">{it.page != null ? `${it.page + 1}쪽` : ''}</td>
-                  <td style={{ width: 96 }}><span className={`chip ${FLAG[it.flag ?? 'todo'][1]}`}><span className="dot" />{FLAG[it.flag ?? 'todo'][0]}</span></td>
+                  <td className="num muted">{b.page != null ? `${b.page + 1}쪽` : ''}</td>
+                  <td style={{ width: 110 }}><span className={`chip ${FLAG[b.flag ?? 'todo'][1]}`}><span className="dot" />{FLAG[b.flag ?? 'todo'][0]}</span></td>
                 </tr>
               ))}
-              {!items.length && (
-                <tr><td colSpan={7} className="muted" style={{ textAlign: 'center', padding: 30 }}>해당하는 항목이 없습니다.</td></tr>
+              {!shown.length && (
+                <tr><td colSpan={4} className="muted" style={{ textAlign: 'center', padding: 30 }}>해당하는 내용이 없습니다.</td></tr>
               )}
             </tbody>
           </table>
@@ -189,7 +198,7 @@ export default function Project({ record, pages, onSave, onBack, notify }) {
         {tab === 'board' && (
           <div className="board">
             {['check', 'todo', 'done'].map((f) => {
-              const col = doc.items.filter((x) => (x.flag ?? 'todo') === f);
+              const col = blocks.filter((x) => (x.flag ?? 'todo') === f);
               return (
                 <div
                   key={f}
@@ -197,20 +206,17 @@ export default function Project({ record, pages, onSave, onBack, notify }) {
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={(e) => {
                     const id = e.dataTransfer.getData('text/plain');
-                    const it = doc.items.find((x) => x.id === id);
-                    if (it) setItem({ ...it, flag: f });
+                    const b = blocks.find((x) => x.id === id);
+                    if (b) setBlock({ ...b, flag: f });
                   }}
                 >
                   <div className="col-h"><span className={`chip ${FLAG[f][1]}`}>{FLAG[f][0]}</span> {col.length}</div>
-                  {col.map((it) => (
-                    <div key={it.id} className={`kcard ${sel === it.id ? 'sel' : ''}`} draggable onDragStart={(e) => e.dataTransfer.setData('text/plain', it.id)} onClick={() => setSel(it.id)}>
-                      <div className="t">{nums.get(it.id)?.label ?? ''} {summary(it)}</div>
+                  {col.map((b) => (
+                    <div key={b.id} className={`kcard ${sel === b.id ? 'sel' : ''}`} draggable onDragStart={(e) => e.dataTransfer.setData('text/plain', b.id)} onClick={() => setSel(b.id)}>
+                      <div className="t">{summary(b)}</div>
                       <div className="m">
-                        {kindChip(it)}
-                        {it.points && <span>{it.points}점</span>}
-                        {it.page != null && <span>원본 {it.page + 1}쪽</span>}
-                        {it.box && <span>&lt;보기&gt;</span>}
-                        {it.figure && <span>그림</span>}
+                        {typeChip(b)}
+                        {b.page != null && <span>원본 {b.page + 1}쪽</span>}
                       </div>
                     </div>
                   ))}
@@ -230,36 +236,33 @@ export default function Project({ record, pages, onSave, onBack, notify }) {
                 </div>
               ))}
             </div>
-            <div>
-              {entry && <Preview doc={doc} entry={entry} zoom={0.55} onPages={setPageCount} onPick={setSel} />}
-            </div>
+            <div>{entry && <Preview doc={doc} entry={entry} zoom={0.55} onPages={setPageCount} onPick={setSel} />}</div>
           </div>
         )}
 
         {tab === 'preview' && (
           <>
             <div className="toolbar">
-              <span style={{ fontSize: 12.5, color: 'var(--ink-2)' }}>{tpl?.name}</span>
+              <span style={{ fontSize: 13.5, color: 'var(--ink-2)' }}>{tpl?.name}</span>
               <span className="sep" />
               {[0.5, 0.75, 1].map((z) => (
                 <button key={z} className={`pill-btn ${zoom === z ? 'on' : ''}`} onClick={() => setZoom(z)}>{Math.round(z * 100)}%</button>
               ))}
-              <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--ink-3)' }}>지면을 누르면 해당 문항을 고칠 수 있어요 · PDF 는 이 모양 그대로 저장됩니다</span>
+              <span style={{ marginLeft: 'auto', fontSize: 13, color: 'var(--ink-3)' }}>지면을 누르면 해당 내용을 고칠 수 있어요 · PDF 는 이 모양 그대로 저장됩니다</span>
             </div>
             {entry ? <Preview doc={doc} entry={entry} zoom={zoom} onPages={setPageCount} onPick={setSel} /> : <div className="loading"><span className="spin" /></div>}
           </>
         )}
       </div>
 
-      {selItem && (
-        <ItemEditor
-          item={selItem}
-          label={nums.get(selItem.id)?.label}
-          pageImage={selItem.page != null ? pages[selItem.page]?.dataUrl : null}
-          onChange={setItem}
+      {selBlock && (
+        <BlockEditor
+          block={selBlock}
+          pageImage={selBlock.page != null ? pages[selBlock.page]?.dataUrl : null}
+          onChange={setBlock}
           onClose={() => setSel(null)}
-          onDelete={() => confirm('이 항목을 지울까요?') && removeItem(selItem.id)}
-          onMove={(d) => moveItem(selItem.id, d)}
+          onDelete={() => confirm('이 내용을 지울까요?') && removeBlock(selBlock.id)}
+          onMove={(d) => moveBlock(selBlock.id, d)}
         />
       )}
 
@@ -286,7 +289,7 @@ function HeaderModal({ entry, doc, onClose, onSave }) {
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-h">
           머리글 · 바닥글 편집 <span className="grow" />
-          <button className="icon-btn" onClick={onClose}><Ic.Close size={16} /></button>
+          <button className="icon-btn" aria-label="닫기" onClick={onClose}><Ic.Close size={16} /></button>
         </div>
         <div className="modal-b">
           <div className="hint" style={{ marginBottom: 12 }}>

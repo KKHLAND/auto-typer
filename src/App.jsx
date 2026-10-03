@@ -7,6 +7,8 @@ import Templates from './ui/Templates.jsx';
 import Settings from './ui/Settings.jsx';
 import { all, del, get, put, loadSettings, saveSettings } from './services/store.js';
 import { sampleDoc } from './sampleDoc.js';
+import { migrateDoc } from './model.js';
+import { LEGACY_IDS } from './services/templates.js';
 
 const COLORS = ['#7a5af8', '#1f6fff', '#12b76a', '#f79009', '#e5484d', '#0ea5a4', '#d444f1'];
 
@@ -72,7 +74,7 @@ export default function App() {
   };
 
   const openSample = async () => {
-    await createProject({ doc: sampleDoc(), templateId: 'wonmook', sourceName: '예제' });
+    await createProject({ doc: sampleDoc(), templateId: 'sample', sourceName: '예제' });
   };
 
   const nav = [
@@ -143,7 +145,10 @@ export default function App() {
 }
 
 function ProjectLoader({ id, projects, ...rest }) {
-  const rec = projects.find((p) => p.id === id);
+  const found = projects.find((p) => p.id === id);
+  // 예전 시험지형으로 저장된 작업은 글자를 그대로 둔 채 학습자료 블록으로 바꿔 연다
+  let rec = found && found.doc?.items ? { ...found, doc: migrateDoc(found.doc) } : found;
+  if (rec && LEGACY_IDS.includes(rec.templateId)) rec = { ...rec, templateId: 'sample', doc: { ...rec.doc, templateId: 'sample' } };
   const [pages, setPages] = useState(null);
   useEffect(() => {
     let alive = true;

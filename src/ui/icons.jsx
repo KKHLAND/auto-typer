@@ -8,8 +8,11 @@ const I = ({ d, size = 18, fill, ...p }) => (
 export const Plus = (p) => <I {...p} d={<path d="M10 4v12M4 10h12" />} />;
 export const Home = (p) => <I {...p} d={<><path d="M3.5 9 10 3.5 16.5 9" /><path d="M5 8v8h10V8" /></>} />;
 export const Layout = (p) => <I {...p} d={<><rect x="3.5" y="3.5" width="13" height="13" rx="2" /><path d="M3.5 8h13M8 8v8.5" /></>} />;
-export const Gear = (p) => (
-  <I {...p} d={<><circle cx="10" cy="10" r="2.6" /><path d="M10 2.8v2M10 15.2v2M2.8 10h2M15.2 10h2M4.9 4.9l1.4 1.4M13.7 13.7l1.4 1.4M4.9 15.1l1.4-1.4M13.7 6.3l1.4-1.4" /></>} />
+export const Gear = ({ size = 18, ...p }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...p}>
+    <circle cx="12" cy="12" r="3" />
+    <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" />
+  </svg>
 );
 export const Help = (p) => <I {...p} d={<><circle cx="10" cy="10" r="7" /><path d="M8 8a2 2 0 1 1 2.6 1.9c-.4.2-.6.5-.6 1V12" /><circle cx="10" cy="14.4" r=".4" fill="currentColor" /></>} />;
 export const List = (p) => <I {...p} d={<path d="M7 5.5h9M7 10h9M7 14.5h9M3.8 5.5h.2M3.8 10h.2M3.8 14.5h.2" />} />;

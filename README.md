@@ -28,17 +28,17 @@ npm test           # hwpx 엔진 테스트 (tests/out/ 에 결과 hwpx)
 |---|---|
 | `src/engine/hwpx.js` | hwpx 양식 엔진. 첫 문단(머리 표·단·머리말/꼬리말) 보존 → 본문 서식 학습(`analyzeTemplate`) → 문서를 그 서식으로 재작성(`buildHwpx`) |
 | `src/engine/markup.js` | 인라인 표기 `__밑줄__` `**굵게**` `$수식$` `[빈칸]` — 모든 모듈 공용 |
-| `src/engine/textParser.js` | AI 없는 규칙 파서 (문항 번호·①~⑤·[1~3]·<보기>) |
-| `src/engine/hwpxReader.js` | 입력 hwpx → 표기 텍스트 (밑줄·굵게·자동 번호 복원) |
+| `src/engine/textParser.js` | AI 없는 규칙 파서 (제목 #·목록 기호·마크다운 표·<보기> 상자, 내용은 그대로) |
+| `src/engine/hwpxReader.js` | 입력 hwpx → 표기 텍스트 (밑줄·굵게·자동 번호·큰 글씨 제목·표 복원) |
 | `src/services/gemini.js` | 쪽 이미지 → 블록(JSON 스키마 강제) |
 | `src/services/convert.js` | 입력 종류별 파이프라인 |
 | `src/preview/paper.js` | 미리보기·PDF 조판 (양식의 쪽 크기·여백·단을 그대로 사용) |
-| `src/model.js` | 문서 모델 `exam-doc/v1`, 블록 → 문항 조립 |
-| `public/templates/` | 내장 양식(원묵고·수능) — `npm run templates` 로 원본 샘플에서 생성 |
+| `src/model.js` | 학습자료 모델 `study-doc/v2` (제목·소제목·문단·목록·상자·표·그림 블록, 번호는 원문 그대로) |
+| `public/templates/` | 내장 샘플 양식(A4 2단 학습지: 학교명 · 학습 자료명 · 학번·이름 머리) — `npm run templates` 로 생성 |
 
 ## 내장 양식 다시 만들기
 
-상위 폴더(`cowork/`)의 원본 샘플 hwpx 에서 본문을 걷어내고 서식 분석 결과를 함께 저장한다.
+상위 폴더(`cowork/`)의 수능 2단 원본에서 글꼴·본문·목록 서식을 배우고, A4 쪽과 새 머리 표(학교명 | 학습 자료명 | 학번·이름)를 붙여 저장한다.
 
 ```bash
 npm run templates

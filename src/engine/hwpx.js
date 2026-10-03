@@ -9,7 +9,7 @@
 
 import { unzipSync, zipSync } from 'fflate';
 import { parseInline, paragraphs, plain } from './markup.js';
-import { CHOICE_MARKS, numberItems } from '../model.js';
+import { blockSummary } from '../model.js';
 
 // 8×11 흰색 PNG (미리보기 썸네일 자리 채움)
 const BLANK_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAgAAAALCAAAAABn8JP5AAAAD0lEQVR4nGP4DwUMNGMAAPRPV6nJuRPhAAAAAElFTkSuQmCC';
@@ -126,9 +126,45 @@ function block(xml, tag, id) {
 
 // ───────────────────────── 양식 분석 ─────────────────────────
 
+// 목록 항목의 머리 기호: • ○ ※ - 1. 1) (1) 가. ① ㉠ ⓐ Ⅰ. 등 — 원문 글자 그대로 둔다
+export const LIST_RE = /^\s*(?:[•·∙◦○●◎□■▪▫▶▷►※✓✔\-–*]|\(?\d{1,2}[.)]|\(?[가-하][.)]|[①-⑳㉠-㉭ⓐ-ⓩ]|[ⅰ-ⅻⅠ-Ⅻ][.)]?|\[\d{1,2}\])\s*\S/;
+
+/** 글자 모양 요약: 크기(HWPUNIT, 1000=10pt)·굵게·밑줄·한글 글꼴 */
+function charInfo(header, cp) {
+  const b = block(header, 'charPr', cp) || '';
+  const fid = /<hh:fontRef hangul="(\d+)"/.exec(b)?.[1];
+  const hangul = /<hh:fontface lang="HANGUL"[\s\S]*?<\/hh:fontface>/.exec(header)?.[0] || '';
+  const face = fid != null ? new RegExp(`<hh:font id="${fid}" face="([^"]*)"`).exec(hangul)?.[1] : null;
+  return {
+    h: +(/ height="(\d+)"/.exec(b)?.[1] ?? 1000),
+    bold: /<hh:bold\/>/.test(b),
+    u: /<hh:underline type="(BOTTOM|CENTER|TOP)"/.test(b),
+    face: face || null,
+  };
+}
+
+/** 문단 모양 요약 (hp:case 값, HWPUNIT) */
+function paraInfo(header, pp) {
+  const b = block(header, 'paraPr', pp) || '';
+  const cs = /<hp:case[\s\S]*?<\/hp:case>/.exec(b)?.[0] || b;
+  const v = (n) => +(new RegExp(`<hc:${n} value="(-?\\d+)"`).exec(cs)?.[1] ?? 0);
+  const ls = /<hh:lineSpacing type="(\w+)" value="(\d+)"/.exec(cs);
+  return {
+    align: /<hh:align horizontal="(\w+)"/.exec(b)?.[1] || 'JUSTIFY',
+    intent: v('intent'),
+    left: v('left'),
+    prev: v('prev'),
+    next: v('next'),
+    line: ls && ls[1] === 'PERCENT' ? +ls[2] : 160,
+    heading: /<hh:heading type="(\w+)"/.exec(b)?.[1] || 'NONE',
+  };
+}
+
 /**
- * 양식 분석: 역할별 서식, 쪽 형상, 머리 문구 목록.
- * @returns {{profile, headerTexts, geometry, stats}}
+ * 양식 분석: 본문 문단을 훑어 역할별 서식을 배운다.
+ *   body(본문) · list(목록) · h1~h3(소제목) · spacer(빈 줄)
+ * 배우지 못한 역할은 본문에서 파생(크기·굵기)하도록 derive 로 표시한다.
+ * @returns {{profile, css, geometry, headerTexts, stats}}
  */
 export function analyzeTemplate(pkg) {
   const sec = readText(pkg, 'Contents/section0.xml');
@@ -136,90 +172,108 @@ export function analyzeTemplate(pkg) {
   const { paras } = topLevelParas(sec);
   if (!paras.length) throw new Error('본문 문단이 없습니다');
 
-  const headingOf = (pp) => {
-    const b = block(header, 'paraPr', pp);
-    return b ? attr(/<hh:heading[^>]*>/.exec(b)?.[0] ?? '', 'type') : 'NONE';
-  };
-  const isUnderlined = (cp) => {
-    const b = block(header, 'charPr', cp);
-    return b ? /<hh:underline type="(BOTTOM|CENTER|TOP)"/.test(b) : false;
-  };
-
-  const votes = { stem: [], choice: [], group: [], passage: [], spacer: [], number: [] };
-  const stemNumberAuto = [];
-
+  const styleName = (id) => new RegExp(`<hh:style id="${id}"[^>]*name="([^"]*)"`).exec(header)?.[1] || '';
+  const samples = [];
   paras.slice(1).forEach(([s, e]) => {
     const p = sec.slice(s, e);
     const open = /<hp:p\b[^>]*>/.exec(p)[0];
-    const pp = attr(open, 'paraPrIDRef');
-    const st = attr(open, 'styleIDRef');
     const runs = topRuns(p);
     if (runs.some((r) => r.ctrl)) return; // 표·그림 문단은 학습 제외
     const text = runs.map((r) => r.text).join('').trim();
-    const textRuns = runs.filter((r) => r.text.trim());
-    const baseCp = mode(textRuns.filter((r) => !isUnderlined(r.charPr)).map((r) => r.charPr)) ?? runs[0]?.charPr;
-    const key = { pp, st, cp: baseCp };
-
-    if (!text) {
-      votes.spacer.push(key);
-      return;
+    // 가장 많은 글자를 차지한 (밑줄 아닌) 글자 모양
+    const weight = new Map();
+    for (const r of runs) {
+      if (!r.text.trim() || charInfo(header, r.charPr).u) continue;
+      weight.set(r.charPr, (weight.get(r.charPr) ?? 0) + r.text.length);
     }
-    if (/^[①-⑦]/.test(text)) votes.choice.push(key);
-    else if (/^\[\s*\d+\s*[~∼～\-－]\s*\d+\s*\]/.test(text)) votes.group.push(key);
-    else if (headingOf(pp) === 'NUMBER' || headingOf(pp) === 'OUTLINE') {
-      votes.stem.push(key);
-      stemNumberAuto.push(true);
-    } else if (/^\d{1,2}\s*[.．]\s*\S/.test(text)) {
-      // 번호를 직접 쓴 발문: 번호 run 의 글자 모양을 따로 기억
-      const first = textRuns[0];
-      const rest = textRuns.slice(1).filter((r) => !isUnderlined(r.charPr));
-      const numOnly = /^\s*\d{1,2}\s*[.．]\s*$/.test(first.text);
-      votes.stem.push({ ...key, cp: numOnly ? (mode(rest.map((r) => r.charPr)) ?? first.charPr) : first.charPr });
-      if (numOnly) votes.number.push({ cp: first.charPr });
-      stemNumberAuto.push(false);
-    } else if (text.length > 40) votes.passage.push(key);
+    const cp = [...weight.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? runs[0]?.charPr ?? '0';
+    const ci = charInfo(header, cp);
+    samples.push({
+      pp: attr(open, 'paraPrIDRef'),
+      st: attr(open, 'styleIDRef'),
+      cp,
+      text,
+      len: text.length,
+      h: ci.h,
+      bold: ci.bold,
+      sname: styleName(attr(open, 'styleIDRef')),
+    });
   });
 
+  const keyOf = (x) => `${x.pp}|${x.st}|${x.cp}`;
   const pick = (list) => {
-    const k = mode(list.map((v) => `${v.pp}|${v.st}|${v.cp}`));
+    const k = mode(list.map(keyOf));
     if (!k) return null;
-    const [pp, st, cp] = k.split('|');
-    return { paraPr: pp, style: st, charPr: cp };
+    const [paraPr, style, charPr] = k.split('|');
+    return { paraPr, style, charPr };
   };
+  const nonEmpty = samples.filter((x) => x.text);
+  const isList = (x) => LIST_RE.test(x.text);
 
-  const passage = pick(votes.passage) ?? pick(votes.stem) ?? { paraPr: '0', style: '0', charPr: '0' };
-  const stem = pick(votes.stem) ?? passage;
-  const choice = pick(votes.choice) ?? passage;
-  const group = pick(votes.group) ?? stem;
-  const spacer = pick(votes.spacer) ?? { ...choice };
-  const numberCp = mode(votes.number.map((v) => v.cp)) ?? numberingCharPr(header, stem.paraPr) ?? null;
+  const bodyCands = nonEmpty.filter((x) => !isList(x) && x.len >= 40);
+  const body = pick(bodyCands) ?? pick(nonEmpty.filter((x) => !isList(x))) ?? pick(nonEmpty) ?? { paraPr: '0', style: '0', charPr: '0' };
+  const bodyC = charInfo(header, body.charPr);
+  const listCands = nonEmpty.filter(isList);
+  const list = pick(listCands);
 
-  const profile = {
-    stem,
-    stemAutoNumber: stemNumberAuto.filter(Boolean).length > stemNumberAuto.length / 2,
-    numberCharPr: numberCp,
-    choice,
-    group,
-    passage,
-    spacer,
-  };
+  // 소제목 후보: 짧고, 본문보다 크거나 굵거나, 스타일 이름이 제목·개요인 문단
+  const headCands = nonEmpty.filter(
+    (x) => !isList(x) && x.len <= 60 && keyOf(x) !== keyOf({ pp: body.paraPr, st: body.style, cp: body.charPr }) &&
+      (x.h >= bodyC.h * 1.08 || (x.bold && !bodyC.bold) || /제목|개요|heading|title/i.test(x.sname)),
+  );
+  // 크기·굵기가 같은 것끼리 묶어 큰 순서로 1~3단계
+  const tiers = new Map();
+  for (const x of headCands) {
+    const t = `${x.h}|${x.bold ? 1 : 0}`;
+    if (!tiers.has(t)) tiers.set(t, []);
+    tiers.get(t).push(x);
+  }
+  const ranked = [...tiers.entries()]
+    .sort((a, b) => {
+      const [ha, ba] = a[0].split('|').map(Number);
+      const [hb, bb] = b[0].split('|').map(Number);
+      return hb - ha || bb - ba;
+    })
+    .slice(0, 3)
+    .map(([, xs]) => pick(xs));
 
+  const DERIVE = [1.5, 1.25, 1.1];
+  const heads = [0, 1, 2].map((i) => ranked[i] ?? { derive: { scale: DERIVE[i], bold: true } });
+  const spacer = pick(samples.filter((x) => !x.text)) ?? body;
+
+  const profile = { body, list: list ?? { derive: { list: true } }, h1: heads[0], h2: heads[1], h3: heads[2], spacer };
   return {
     profile,
+    css: roleCss(header, profile),
     geometry: geometry(sec),
     headerTexts: collectHeaderTexts(pkg),
-    stats: Object.fromEntries(Object.entries(votes).map(([k, v]) => [k, v.length])),
+    stats: { paragraphs: nonEmpty.length, body: bodyCands.length, list: listCands.length, heading: ranked.length },
   };
 }
 
-function numberingCharPr(header, paraPr) {
-  const b = block(header, 'paraPr', paraPr);
-  const h = b && /<hh:heading[^>]*>/.exec(b)?.[0];
-  if (!h || attr(h, 'type') !== 'NUMBER') return null;
-  const nb = block(header, 'numbering', attr(h, 'idRef'));
-  const ph = nb && /<hh:paraHead[^>]*level="1"[^>]*>/.exec(nb)?.[0];
-  const cp = ph && attr(ph, 'charPrIDRef');
-  return cp && cp !== '4294967295' ? cp : null;
+/** 미리보기용 역할별 CSS 값 (pt·em) — hwpx 의 실제 서식을 화면에 근사 */
+function roleCss(header, profile) {
+  const base = (role) => {
+    const r = profile[role];
+    const src = r.derive ? profile.body : r;
+    const c = charInfo(header, src.charPr);
+    const p = paraInfo(header, src.paraPr);
+    const out = {
+      size: +(c.h / 100).toFixed(1),
+      bold: c.bold,
+      face: c.face,
+      align: p.align,
+      indent: +(p.intent / 100).toFixed(1),
+      left: +(p.left / 100).toFixed(1),
+      line: p.line,
+      prev: +(p.prev / 100).toFixed(1),
+      next: +(p.next / 100).toFixed(1),
+    };
+    if (r.derive?.scale) Object.assign(out, { size: +(out.size * r.derive.scale).toFixed(1), bold: true, indent: 0, left: 0, align: 'LEFT', prev: out.size * 0.6 });
+    if (r.derive?.list) Object.assign(out, { indent: -12, left: 12 });
+    return out;
+  };
+  return { body: base('body'), list: base('list'), h1: base('h1'), h2: base('h2'), h3: base('h3') };
 }
 
 function mode(arr) {
@@ -329,7 +383,7 @@ function clearP0BodyText(p0) {
 
 // ───────────────────────── header.xml 서식 파생 ─────────────────────────
 
-class HeaderEditor {
+export class HeaderEditor {
   constructor(xml) {
     this.xml = xml;
     this.cache = new Map();
@@ -371,6 +425,8 @@ class HeaderEditor {
     x = x.replace(/<hh:paraPr id="\d+"/, `<hh:paraPr id="${id}"`);
     if (o.align) x = x.replace(/<hh:align horizontal="[A-Z_]+"/, `<hh:align horizontal="${o.align}"`);
     if (o.noHeading) x = x.replace(/<hh:heading [^>]*\/>/, '<hh:heading type="NONE" idRef="0" level="0"/>');
+    // 문단 테두리(예: 시험지의 지문 상자)는 떼어 낸다 — 상자는 'box' 블록으로 따로 그린다
+    if (!o.keepBorder) x = x.replace(/<hh:border borderFillIDRef="\d+"/, `<hh:border borderFillIDRef="${this.noneBorder()}"`);
     const setM = (name, v) => {
       if (v == null) return;
       // hp:case 는 그대로, hp:default 는 2배 값 (한글 저장 규칙)
@@ -388,6 +444,33 @@ class HeaderEditor {
     setM('next', o.next);
     this.append('paraProperties', 'paraPr', x);
     this.cache.set(k, id);
+    return id;
+  }
+  /** 테두리 없음 (있으면 재사용) */
+  noneBorder() {
+    if (this.cache.has('noneBorder')) return this.cache.get('noneBorder');
+    let id = null;
+    for (const m of this.xml.matchAll(/<hh:borderFill id="(\d+)"[\s\S]*?<\/hh:borderFill>/g)) {
+      const b = m[0];
+      const sides = ['left', 'right', 'top', 'bottom'].map((s) => new RegExp(`<hh:${s}Border type="NONE"`).test(b));
+      if (sides.every(Boolean) && !/<hc:winBrush faceColor="#(?!FFFFFF)[0-9A-F]{6}"/i.test(b)) {
+        id = m[1];
+        break;
+      }
+    }
+    if (id == null) {
+      id = String(this.maxId('borderFill') + 1);
+      const line = (n) => `<hh:${n} type="NONE" width="0.1 mm" color="#000000"/>`;
+      this.append(
+        'borderFills',
+        'borderFill',
+        `<hh:borderFill id="${id}" threeD="0" shadow="0" centerLine="NONE" breakCellSeparateLine="0">` +
+          `<hh:slash type="NONE" Crooked="0" isCounter="0"/><hh:backSlash type="NONE" Crooked="0" isCounter="0"/>` +
+          line('leftBorder') + line('rightBorder') + line('topBorder') + line('bottomBorder') +
+          `<hh:diagonal type="NONE" width="0.1 mm" color="#000000"/></hh:borderFill>`,
+      );
+    }
+    this.cache.set('noneBorder', id);
     return id;
   }
   /** 사방 실선 테두리 */
@@ -454,18 +537,54 @@ class Writer {
     this.p = analysis.profile;
     this.hdr = new HeaderEditor(readText(pkg, 'Contents/header.xml'));
     this.opts = opts;
-    this.out = [];
     this.images = [];
     this.imgSeq = Object.keys(pkg.files).filter((k) => k.startsWith('BinData/')).length + 1;
-    this.charHeight = +(/ height="(\d+)"/.exec(block(this.hdr.xml, 'charPr', this.p.passage.charPr) ?? '')?.[1] ?? 1000);
 
     const P = this.p;
-    // 번호를 직접 쓰는 발문 문단: 자동 번호 끄고 내어쓰기
-    this.stemPara = this.hdr.paraPr(P.stem.paraPr, { noHeading: true, intent: P.stemAutoNumber ? -1400 : undefined });
-    this.groupPara = this.hdr.paraPr(P.group.paraPr, { noHeading: true });
-    this.centerPara = this.hdr.paraPr(P.passage.paraPr, { align: 'CENTER', intent: 0, left: 0, noHeading: true });
-    this.boxPara = this.hdr.paraPr(P.passage.paraPr, { intent: 0, left: 0, noHeading: true });
-    this.numberCp = P.numberCharPr ?? this.hdr.charPr(P.stem.charPr, { b: true });
+    const B = P.body;
+    const heightOf = (cp) => +(/ height="(\d+)"/.exec(block(this.hdr.xml, 'charPr', cp) ?? '')?.[1] ?? 1000);
+    const bodyH = heightOf(B.charPr);
+    this.charHeight = bodyH;
+    const leftOf = (pp) => {
+      const b = block(this.hdr.xml, 'paraPr', pp) || '';
+      const cs = /<hp:case[\s\S]*?<\/hp:case>/.exec(b)?.[0] || b;
+      return +(/<hc:left value="(-?\d+)"/.exec(cs)?.[1] ?? 0);
+    };
+
+    // 역할 → 실제 {paraPr, style, charPr}. 배운 서식은 그대로, 없으면 본문에서 파생.
+    // 자동 번호(개요·문단 번호)는 꺼서 원문 번호와 겹치지 않게 한다.
+    const resolve = (r) => {
+      if (!r.derive) return { paraPr: this.hdr.paraPr(r.paraPr, { noHeading: true }), style: r.style, charPr: r.charPr };
+      if (r.derive.scale) {
+        return {
+          paraPr: this.hdr.paraPr(B.paraPr, { noHeading: true, intent: 0, left: 0, align: 'LEFT', prev: Math.round(bodyH * 0.6) }),
+          style: B.style,
+          charPr: this.hdr.charPr(B.charPr, { b: true, size: Math.round(bodyH * r.derive.scale) }),
+        };
+      }
+      return { paraPr: this.hdr.paraPr(B.paraPr, { noHeading: true, intent: -1200, left: 1200 }), style: B.style, charPr: B.charPr };
+    };
+    this.R = {
+      body: { paraPr: this.hdr.paraPr(B.paraPr, { noHeading: true }), style: B.style, charPr: B.charPr },
+      h1: resolve(P.h1),
+      h2: resolve(P.h2),
+      h3: resolve(P.h3),
+      list1: resolve(P.list),
+    };
+    // 목록 2·3단계: 1단계보다 한 칸씩 더 들여쓴다
+    const L = this.R.list1;
+    const baseLeft = leftOf(L.paraPr);
+    this.R.list2 = { ...L, paraPr: this.hdr.paraPr(L.paraPr, { left: baseLeft + 1800 }) };
+    this.R.list3 = { ...L, paraPr: this.hdr.paraPr(L.paraPr, { left: baseLeft + 3600 }) };
+    // 자료 제목: 1단계 소제목을 키워 가운데로
+    const h1H = heightOf(this.R.h1.charPr);
+    this.R.title = {
+      paraPr: this.hdr.paraPr(this.R.h1.paraPr, { align: 'CENTER', intent: 0, left: 0 }),
+      style: this.R.h1.style,
+      charPr: this.hdr.charPr(this.R.h1.charPr, { b: true, size: Math.round(Math.max(h1H * 1.15, bodyH * 1.6)) }),
+    };
+    this.centerPara = this.hdr.paraPr(B.paraPr, { align: 'CENTER', intent: 0, left: 0, noHeading: true });
+    this.cellPara = this.hdr.paraPr(B.paraPr, { intent: 0, left: 0, noHeading: true, prev: 0, next: 0 });
   }
 
   runs(text, baseCp) {
@@ -479,13 +598,13 @@ class Writer {
       .join('');
   }
 
-  para(paraPr, style, inner, extra = '') {
-    return `<hp:p id="0" paraPrIDRef="${paraPr}" styleIDRef="${style}" pageBreak="0" columnBreak="0" merged="0"${extra}>${inner || `<hp:run charPrIDRef="${this.p.passage.charPr}"><hp:t/></hp:run>`}</hp:p>`;
+  para(paraPr, style, inner) {
+    return `<hp:p id="0" paraPrIDRef="${paraPr}" styleIDRef="${style}" pageBreak="0" columnBreak="0" merged="0">${inner || `<hp:run charPrIDRef="${this.p.body.charPr}"><hp:t/></hp:run>`}</hp:p>`;
   }
 
-  textParas(text, role, paraPr = role.paraPr, style = role.style) {
+  textParas(text, role) {
     return paragraphs(text)
-      .map((line) => this.para(paraPr, style, this.runs(line, role.charPr)))
+      .map((line) => this.para(role.paraPr, role.style, this.runs(line, role.charPr)))
       .join('');
   }
 
@@ -494,27 +613,69 @@ class Writer {
     return this.para(s.paraPr, s.style, `<hp:run charPrIDRef="${s.charPr}"><hp:t/></hp:run>`);
   }
 
+  /** 1행 1열 표로 그린 상자 */
   box(title, text) {
     const bf = this.hdr.boxBorder();
     const W = this.a.geometry.colWidth - 200;
-    const P = this.p.passage;
+    const B = this.R.body;
     let inner = '';
-    if (title) inner += this.para(this.centerPara, '0', this.runs(title, P.charPr));
+    if (title) inner += this.para(this.centerPara, '0', this.runs(title, B.charPr));
     inner += paragraphs(text)
-      .map((line) => this.para(this.boxPara, '0', this.runs(line, P.charPr)))
+      .map((line) => this.para(this.cellPara, '0', this.runs(line, B.charPr)))
       .join('');
     const lines = paragraphs(text).reduce((n, l) => n + Math.max(1, Math.ceil(plain(l).length / 40)), title ? 1 : 0);
     const H = Math.max(1500, Math.round(lines * this.charHeight * 1.7) + 600);
-    const tbl =
-      `<hp:tbl id="${nextObjId()}" zOrder="0" numberingType="TABLE" textWrap="TOP_AND_BOTTOM" textFlow="BOTH_SIDES" lock="0" dropcapstyle="None" pageBreak="CELL" repeatHeader="0" rowCnt="1" colCnt="1" cellSpacing="0" borderFillIDRef="${bf}" noAdjust="0">` +
+    return this.para(this.centerPara, '0', `<hp:run charPrIDRef="${B.charPr}">${this.tblXml(bf, W, [[{ inner, w: W, h: H }]], 510, 283)}<hp:t/></hp:run>`);
+  }
+
+  /** 표: 첫 행은 굵게, 칸 너비는 균등 */
+  table(rows) {
+    if (!rows?.length) return '';
+    const bf = this.hdr.boxBorder();
+    const W = this.a.geometry.colWidth - 200;
+    const cols = Math.max(...rows.map((r) => r.length));
+    const cw = Math.floor(W / cols);
+    const B = this.R.body;
+    const boldCp = this.hdr.charPr(B.charPr, { b: true });
+    const perLine = Math.max(6, (cw / this.charHeight) * 1.6);
+    const grid = rows.map((r, ri) =>
+      Array.from({ length: cols }, (_, ci) => {
+        const t = r[ci] ?? '';
+        const inner = paragraphs(t)
+          .map((line) => this.para(this.cellPara, '0', this.runs(line, ri === 0 && rows.length > 1 ? boldCp : B.charPr)))
+          .join('');
+        const lines = paragraphs(t).reduce((n, l) => n + Math.max(1, Math.ceil(plain(l).length / perLine)), 0);
+        return { inner, w: cw, h: Math.max(1000, Math.round(lines * this.charHeight * 1.6) + 400) };
+      }),
+    );
+    return this.para(this.centerPara, '0', `<hp:run charPrIDRef="${B.charPr}">${this.tblXml(bf, cw * cols, grid, 283, 141)}<hp:t/></hp:run>`);
+  }
+
+  tblXml(bf, W, grid, padX, padY) {
+    const rowH = grid.map((r) => Math.max(...r.map((c) => c.h)));
+    const H = rowH.reduce((a, b) => a + b, 0);
+    const multi = grid.length > 1;
+    const trs = grid
+      .map(
+        (r, ri) =>
+          `<hp:tr>${r
+            .map(
+              (c, ci) =>
+                `<hp:tc name="" header="${ri === 0 && multi ? 1 : 0}" hasMargin="1" protect="0" editable="0" dirty="0" borderFillIDRef="${bf}">` +
+                `<hp:subList id="" textDirection="HORIZONTAL" lineWrap="BREAK" vertAlign="${multi ? 'CENTER' : 'TOP'}" linkListIDRef="0" linkListNextIDRef="0" textWidth="0" textHeight="0" hasTextRef="0" hasNumRef="0">${c.inner || this.para(this.cellPara, '0', '')}</hp:subList>` +
+                `<hp:cellAddr colAddr="${ci}" rowAddr="${ri}"/><hp:cellSpan colSpan="1" rowSpan="1"/><hp:cellSz width="${c.w}" height="${rowH[ri]}"/>` +
+                `<hp:cellMargin left="${padX}" right="${padX}" top="${padY}" bottom="${padY}"/></hp:tc>`,
+            )
+            .join('')}</hp:tr>`,
+      )
+      .join('');
+    return (
+      `<hp:tbl id="${nextObjId()}" zOrder="0" numberingType="TABLE" textWrap="TOP_AND_BOTTOM" textFlow="BOTH_SIDES" lock="0" dropcapstyle="None" pageBreak="CELL" repeatHeader="1" rowCnt="${grid.length}" colCnt="${grid[0].length}" cellSpacing="0" borderFillIDRef="${bf}" noAdjust="0">` +
       `<hp:sz width="${W}" widthRelTo="ABSOLUTE" height="${H}" heightRelTo="ABSOLUTE" protect="0"/>` +
       `<hp:pos treatAsChar="1" affectLSpacing="0" flowWithText="1" allowOverlap="0" holdAnchorAndSO="0" vertRelTo="PARA" horzRelTo="COLUMN" vertAlign="TOP" horzAlign="LEFT" vertOffset="0" horzOffset="0"/>` +
-      `<hp:outMargin left="0" right="0" top="0" bottom="0"/><hp:inMargin left="510" right="510" top="283" bottom="283"/>` +
-      `<hp:tr><hp:tc name="" header="0" hasMargin="1" protect="0" editable="0" dirty="0" borderFillIDRef="${bf}">` +
-      `<hp:subList id="" textDirection="HORIZONTAL" lineWrap="BREAK" vertAlign="TOP" linkListIDRef="0" linkListNextIDRef="0" textWidth="0" textHeight="0" hasTextRef="0" hasNumRef="0">${inner}</hp:subList>` +
-      `<hp:cellAddr colAddr="0" rowAddr="0"/><hp:cellSpan colSpan="1" rowSpan="1"/><hp:cellSz width="${W}" height="${H}"/>` +
-      `<hp:cellMargin left="510" right="510" top="283" bottom="283"/></hp:tc></hp:tr></hp:tbl>`;
-    return this.para(this.centerPara, '0', `<hp:run charPrIDRef="${P.charPr}">${tbl}<hp:t/></hp:run>`);
+      `<hp:outMargin left="0" right="0" top="0" bottom="0"/><hp:inMargin left="${padX}" right="${padX}" top="${padY}" bottom="${padY}"/>` +
+      `${trs}</hp:tbl>`
+    );
   }
 
   figure(fig) {
@@ -543,55 +704,51 @@ class Writer {
       `<hp:sz width="${w}" widthRelTo="ABSOLUTE" height="${h}" heightRelTo="ABSOLUTE" protect="0"/>` +
       `<hp:pos treatAsChar="1" affectLSpacing="0" flowWithText="1" allowOverlap="0" holdAnchorAndSO="0" vertRelTo="PARA" horzRelTo="PARA" vertAlign="TOP" horzAlign="LEFT" vertOffset="0" horzOffset="0"/>` +
       `<hp:outMargin left="0" right="0" top="0" bottom="0"/><hp:shapeComment>그림입니다.</hp:shapeComment></hp:pic>`;
-    return this.para(this.centerPara, '0', `<hp:run charPrIDRef="${this.p.passage.charPr}">${pic}<hp:t/></hp:run>`);
+    return this.para(this.centerPara, '0', `<hp:run charPrIDRef="${this.p.body.charPr}">${pic}<hp:t/></hp:run>`);
   }
 
   write(doc) {
-    const P = this.p;
-    const nums = numberItems(doc.items);
+    const R = this.R;
     const xs = [];
-    for (const it of doc.items) {
-      if (it.kind === 'text') {
-        xs.push(this.textParas(it.text, { ...P.group, charPr: this.hdr.charPr(P.group.charPr, { b: true }) }, this.groupPara));
-        xs.push(this.spacer());
-      } else if (it.kind === 'group') {
-        if (it.instruction) xs.push(this.textParas(it.instruction, P.group, this.groupPara));
-        if (it.passage) xs.push(this.textParas(it.passage, P.passage));
-        if (it.figure) xs.push(this.figure(it.figure));
-        xs.push(this.spacer());
-      } else if (it.kind === 'question') {
-        const label = nums.get(it.id)?.label ?? '';
-        const lines = paragraphs(it.stem || '');
-        const pts = it.points ? ` [${String(it.points).replace(/점$/, '')}점]` : '';
-        lines[lines.length - 1] += pts;
-        lines.forEach((line, i) => {
-          const head = i === 0 && label ? `<hp:run charPrIDRef="${this.numberCp}"><hp:t>${esc(label)} </hp:t></hp:run>` : '';
-          xs.push(this.para(this.stemPara, P.stem.style, head + this.runs(line, P.stem.charPr)));
-        });
-        if (it.passage) xs.push(this.textParas(it.passage, P.passage));
-        if (it.figure) xs.push(this.figure(it.figure));
-        if (it.box && (it.box.text || it.box.title)) xs.push(this.box(it.box.title, it.box.text));
-        if (it.answerType === 'choice' && !(it.choices || []).some((c) => c.trim())) {
-          // 지문 속 번호를 고르는 문항: 선지 번호만 한 줄로
-          const marks = CHOICE_MARKS.slice(0, Math.max(5, it.choices?.length || 5)).join('      ');
-          xs.push(this.para(P.choice.paraPr, P.choice.style, this.runs(marks, P.choice.charPr)));
-        } else if (it.answerType === 'choice') {
-          (it.choices || []).forEach((c, i) => {
-            if (!c && i >= 5) return;
-            xs.push(this.para(P.choice.paraPr, P.choice.style, this.runs(`${CHOICE_MARKS[i] ?? ''} ${c}`, P.choice.charPr)));
-          });
-        } else {
-          const n = it.answerType === 'essay' ? 6 : 2;
-          for (let i = 0; i < n; i++) xs.push(this.spacer());
+    const blocks = doc.blocks || [];
+    blocks.forEach((b, i) => {
+      const prev = blocks[i - 1];
+      switch (b.type) {
+        case 'title':
+          xs.push(this.textParas(b.text, R.title));
+          xs.push(this.spacer());
+          break;
+        case 'heading': {
+          const lv = Math.min(3, Math.max(1, b.level || 1));
+          if (i > 0 && lv <= 2 && prev?.type !== 'title') xs.push(this.spacer());
+          xs.push(this.textParas(b.text, R[`h${lv}`]));
+          break;
         }
-        xs.push(this.spacer());
+        case 'list': {
+          const lv = Math.min(3, Math.max(1, b.level || 1));
+          xs.push(this.textParas(b.text, R[`list${lv}`]));
+          break;
+        }
+        case 'box':
+          xs.push(this.box(b.title, b.text));
+          break;
+        case 'table':
+          xs.push(this.table(b.rows));
+          if (b.text) xs.push(this.para(this.centerPara, R.body.style, this.runs(b.text, R.body.charPr)));
+          break;
+        case 'figure':
+          xs.push(this.figure(b.figure));
+          if (b.text) xs.push(this.para(this.centerPara, R.body.style, this.runs(b.text, R.body.charPr)));
+          break;
+        default:
+          xs.push(this.textParas(b.text, R.body));
       }
-    }
+    });
     return xs.join('');
   }
 }
 
-/** 시험지 문서 → hwpx 바이트 */
+/** 학습자료 문서 → hwpx 바이트 */
 export function buildHwpx(templatePkg, doc, opts = {}) {
   const pkg = clonePkg(templatePkg);
   const analysis = opts.analysis ?? analyzeTemplate(pkg);
@@ -637,19 +794,12 @@ export function buildHwpx(templatePkg, doc, opts = {}) {
 }
 
 function previewText(doc) {
-  const nums = numberItems(doc.items);
-  return doc.items
-    .map((it) =>
-      it.kind === 'question'
-        ? `${nums.get(it.id)?.label ?? ''} ${plain(it.stem)}`
-        : plain(it.instruction || it.text || ''),
-    )
-    .join('\r\n');
+  return (doc.blocks || []).map((b) => plain(blockSummary(b))).join('\r\n');
 }
 
 /** 무거운 원본에서 본문을 걷어낸 가벼운 양식 파일 만들기 (내장 양식 제작용) */
 export function stripToTemplate(pkg) {
   const analysis = analyzeTemplate(pkg);
-  const bytes = buildHwpx(pkg, { title: '', items: [] }, { analysis });
+  const bytes = buildHwpx(pkg, { title: '', blocks: [] }, { analysis });
   return { bytes, analysis };
 }

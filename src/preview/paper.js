@@ -1,65 +1,80 @@
-// 시험지 지면 조판기 (미리보기 = PDF 인쇄본)
-// hwpx 양식에서 읽은 쪽 크기·여백·단 수를 그대로 쓰고, 문항을 '조판 단위'로 잘라
-// 단→쪽 순으로 채운다. 넘치면 다음 쪽, 긴 문단은 문장 경계에서 나눈다.
+// 학습자료 지면 조판기 (미리보기 = PDF 인쇄본)
+// hwpx 양식에서 읽은 쪽 크기·여백·단 수와 역할별 글꼴·크기·들여쓰기를 그대로 쓰고,
+// 블록을 '조판 단위'로 잘라 단→쪽 순으로 채운다. 넘치면 다음 쪽, 긴 문단은 문장 경계에서 나눈다.
 import { escapeHtml as esc, inlineHtml, paragraphs } from '../engine/markup.js';
-import { CHOICE_MARKS, numberItems } from '../model.js';
 
 const MM = 283.465; // HWPUNIT per mm
 
 /** 문서 → 조판 단위 목록 [{html, cls, keepNext, split}] */
 export function buildUnits(doc) {
-  const nums = numberItems(doc.items);
   const U = [];
-  const para = (cls, text, id) => paragraphs(text).filter((l) => l.trim() !== '' || cls === 'u-para').forEach((l) =>
-    U.push({ cls, html: inlineHtml(l), id, split: cls === 'u-para' }),
-  );
-  for (const it of doc.items) {
-    if (it.kind === 'text') {
-      U.push({ cls: 'u-section', html: inlineHtml(it.text), id: it.id, keepNext: true });
-    } else if (it.kind === 'group') {
-      if (it.instruction) U.push({ cls: 'u-group', html: inlineHtml(it.instruction), id: it.id, keepNext: true });
-      if (it.passage) para('u-para u-gpara', it.passage, it.id);
-      if (it.figure?.src) U.push({ cls: 'u-fig', html: `<img src="${it.figure.src}" alt="">`, id: it.id });
-      U.push({ cls: 'u-gap', html: '', id: it.id });
-    } else if (it.kind === 'question') {
-      const label = nums.get(it.id)?.label ?? '';
-      const lines = paragraphs(it.stem || '');
-      const pts = it.points ? ` <span class="pts">[${esc(String(it.points).replace(/점$/, ''))}점]</span>` : '';
-      U.push({
-        cls: 'u-stem',
-        id: it.id,
-        keepNext: true,
-        html: `<span class="num">${esc(label)}</span> <span class="stx">${lines.map(inlineHtml).join('<br>')}${pts}</span>`,
-      });
-      if (it.passage) para('u-para', it.passage, it.id);
-      if (it.figure?.src) U.push({ cls: 'u-fig', html: `<img src="${it.figure.src}" alt="">`, id: it.id });
-      if (it.box && (it.box.text || it.box.title)) {
+  for (const b of doc.blocks || []) {
+    const id = b.id;
+    switch (b.type) {
+      case 'title':
+        U.push({ cls: 'u-title', html: inlineHtml(b.text), id, keepNext: true });
+        break;
+      case 'heading': {
+        const lv = Math.min(3, Math.max(1, b.level || 1));
+        paragraphs(b.text).forEach((l) => U.push({ cls: `u-h u-h${lv}`, html: inlineHtml(l), id, keepNext: true }));
+        break;
+      }
+      case 'list': {
+        const lv = Math.min(3, Math.max(1, b.level || 1));
+        paragraphs(b.text).forEach((l) => U.push({ cls: `u-list u-l${lv}`, html: inlineHtml(l), id }));
+        break;
+      }
+      case 'box':
         U.push({
           cls: 'u-box',
-          id: it.id,
-          html: (it.box.title ? `<div class="bt">${inlineHtml(it.box.title)}</div>` : '') +
-            paragraphs(it.box.text).map((l) => `<div class="bp">${inlineHtml(l)}</div>`).join(''),
+          id,
+          html: (b.title ? `<div class="bt">${inlineHtml(b.title)}</div>` : '') +
+            paragraphs(b.text).map((l) => `<div class="bp">${inlineHtml(l)}</div>`).join(''),
         });
+        break;
+      case 'table': {
+        const rows = b.rows || [];
+        const head = rows.length > 1;
+        U.push({
+          cls: 'u-table',
+          id,
+          html:
+            `<table>${rows
+              .map((r, ri) => `<tr>${r.map((c) => `<${ri === 0 && head ? 'th' : 'td'}>${paragraphs(c).map(inlineHtml).join('<br>')}</${ri === 0 && head ? 'th' : 'td'}>`).join('')}</tr>`)
+              .join('')}</table>` + (b.text ? `<div class="cap">${inlineHtml(b.text)}</div>` : ''),
+        });
+        break;
       }
-      if (it.answerType === 'choice') {
-        const cs = it.choices || [];
-        if (!cs.some((c) => c.trim())) {
-          U.push({ cls: 'u-choices row', id: it.id, html: CHOICE_MARKS.slice(0, Math.max(5, cs.length)).map((m) => `<span>${m}</span>`).join('') });
-        } else {
-          const short = cs.every((c) => c.replace(/[_*$]/g, '').length <= 9);
-          U.push({
-            cls: `u-choices${short ? ' grid' : ''}`,
-            id: it.id,
-            html: cs.map((c, i) => `<div class="ch"><span class="cm">${CHOICE_MARKS[i] ?? ''}</span><span>${inlineHtml(c)}</span></div>`).join(''),
-          });
-        }
-      } else {
-        U.push({ cls: `u-answer ${it.answerType}`, id: it.id, html: '' });
-      }
-      U.push({ cls: 'u-gap', html: '', id: it.id });
+      case 'figure':
+        if (b.figure?.src) U.push({ cls: 'u-fig', html: `<img src="${b.figure.src}" alt="">` + (b.text ? `<div class="cap">${inlineHtml(b.text)}</div>` : ''), id });
+        break;
+      default:
+        paragraphs(b.text).forEach((l) => l.trim() && U.push({ cls: 'u-para', html: inlineHtml(l), id, split: true }));
     }
   }
   return U;
+}
+
+/** 양식의 역할별 서식(analysis.css) → 지면 CSS 변수 */
+export function roleVars(css) {
+  const vars = {};
+  if (!css) return vars;
+  const ALIGN = { JUSTIFY: 'justify', DISTRIBUTE: 'justify', LEFT: 'left', RIGHT: 'right', CENTER: 'center' };
+  for (const [role, r] of Object.entries(css)) {
+    const sans = /고딕|돋움|굴림|sans|Gothic|Dotum/i.test(r.face || '');
+    const fallback = sans ? "'Noto Sans KR', sans-serif" : "'Noto Serif KR', serif";
+    vars[`--${role}-face`] = r.face ? `'${r.face}', ${fallback}` : fallback;
+    vars[`--${role}-size`] = `${r.size}pt`;
+    vars[`--${role}-weight`] = r.bold ? 700 : 400;
+    vars[`--${role}-align`] = ALIGN[r.align] || 'justify';
+    // hwp 의 들여쓰기(+)/내어쓰기(−)를 CSS 로: 내어쓰기면 둘째 줄부터 그만큼 더 들어간다
+    vars[`--${role}-ti`] = `${r.indent}pt`;
+    vars[`--${role}-pad`] = `${r.left + Math.max(0, -r.indent)}pt`;
+    vars[`--${role}-line`] = (r.line || 160) / 100;
+    vars[`--${role}-prev`] = `${r.prev || 0}pt`;
+    vars[`--${role}-next`] = `${r.next || 0}pt`;
+  }
+  return vars;
 }
 
 /** 양식 분석의 형상 → mm */
@@ -78,35 +93,22 @@ export function pageSpec(geometry) {
 }
 
 // ── 테마별 머리·꼬리 ──
+// sample: 머리 문구 = [쪽 번호 앞, 쪽 번호 뒤, 학교명, 학습 자료명, 학번·이름(한 줄)]
 function headerHtml(theme, T) {
   const t = (i, d = '') => esc(T[i] ?? d);
-  if (theme === 'wonmook') {
-    return `<div class="hd-wm"><table><tr>
-      <td class="c1"><div class="s">${t(0)}</div><div class="b">${t(1)}</div><div class="s">${t(2)}</div></td>
-      <td class="c2"><div class="b">${t(3)}</div><div class="b">${t(4)}</div></td>
-      <td class="c3"><div class="b">${t(5)}</div><div class="m">${t(8)}</div></td>
-      <td class="c4"><div>${t(9)}</div><div>${t(10)}</div><div>${t(11)}</div></td></tr></table>
-      <div class="notice">${t(12)}</div></div>`;
-  }
-  if (theme === 'suneung') {
-    return `<div class="hd-sn"><div class="ttl">${t(0)}</div>
-      <div class="row"><span class="oval">${t(5)}</span><span class="area">${t(1)}</span><span class="type">홀수형</span></div><div class="rule"></div></div>`;
+  if (theme === 'sample') {
+    return `<div class="hd-sp"><div class="l">${t(2)}</div><div class="c">${t(3)}</div><div class="r">${t(4)}</div></div>`;
   }
   const lines = T.slice(0, 4).filter(Boolean);
   return `<div class="hd-gen">${lines.map((l, i) => `<div class="${i === 0 ? 'b' : ''}">${esc(l)}</div>`).join('')}</div>`;
 }
 
-function runningHead(theme, T, n) {
-  if (theme === 'suneung') return `<div class="rh-sn ${n % 2 ? 'odd' : 'even'}"><span>${esc((n % 2 ? T[4] : T[3]) ?? '')}</span></div>`;
+function runningHead() {
   return '';
 }
 
-function footerHtml(theme, T, n, total, last) {
-  if (theme === 'wonmook') {
-    return `${last ? '' : `<div class="cont">${esc(T[n % 2 ? 14 : 13] ?? '다음 면에 계속됩니다.')}</div>`}
-      <div class="ft-wm"><span>${esc(T[6] ?? '')}${n}${esc((T[7] ?? '').replace(/\(\s*\d+\s*\)면/, `( ${total} )면`))}</span></div>`;
-  }
-  if (theme === 'suneung') return `<div class="ft-sn"><span class="pn">${n}</span><span class="tot">${total}</span></div>`;
+function footerHtml(theme, T, n, total) {
+  if (theme === 'sample') return `<div class="ft-gen">${esc(T[0] ?? '- ')}${n}${esc(T[1] ?? ' -')}</div>`;
   return `<div class="ft-gen">${n} / ${total}</div>`;
 }
 
@@ -116,13 +118,14 @@ function footerHtml(theme, T, n, total, last) {
  * @param {{doc, geometry, theme, headerTexts:string[]}} o
  * @returns {number} 쪽 수
  */
-export async function layout(host, { doc, geometry, theme, headerTexts }) {
+export async function layout(host, { doc, geometry, theme, headerTexts, css }) {
   if (document.fonts?.ready) await document.fonts.ready;
   const S = pageSpec(geometry);
   host.innerHTML = '';
   host.style.setProperty('--pw', `${S.w}mm`);
   host.style.setProperty('--ph', `${S.h}mm`);
   host.className = `paper-host theme-${theme}`;
+  for (const [k, v] of Object.entries(roleVars(css))) host.style.setProperty(k, String(v));
   const units = buildUnits(doc);
   const pages = [];
 

@@ -7,10 +7,10 @@ const fmt = (t) => {
 };
 
 export function reviewStats(doc) {
-  const qs = doc.items.filter((i) => i.kind !== 'text');
+  const qs = doc.blocks || [];
   const done = qs.filter((i) => i.flag === 'done').length;
   const check = qs.filter((i) => i.flag === 'check').length;
-  return { total: qs.length, questions: doc.items.filter((i) => i.kind === 'question').length, done, check, pct: qs.length ? Math.round((done / qs.length) * 100) : 0 };
+  return { total: qs.length, done, check, pct: qs.length ? Math.round((done / qs.length) * 100) : 0 };
 }
 
 export function StatusChip({ stats }) {
@@ -41,8 +41,8 @@ export default function Home({ projects, onOpen, onNew, onSample, onDelete }) {
             <div className="hero-card">
               <h3>학습자료를 올리면, 원하는 학교 양식의 한글 파일로.</h3>
               <p>
-                수업 자료·학습지·판서 사진·손글씨 필기·PDF·hwpx·텍스트를 올리거나 붙여 넣으세요. 손글씨도 빠르게 읽어 내용 그대로 정리하고,
-                제목·지문·문항·&lt;보기&gt;·밑줄·수식을 살려 <b>원하는 양식</b>(우리 학교 hwpx, 또는 샘플 양식)의 <b>hwpx</b> 와 <b>PDF</b> 로 만듭니다.
+                수업 자료·학습지·판서 사진·손글씨 필기·PDF·hwpx·텍스트를 올리거나 붙여 넣으세요. 손글씨까지 빠르게 읽어
+                내용은 고치지 않고 제목·문단·목록·상자·표로만 나눈 뒤, <b>원하는 양식</b>(우리 학교 hwpx, 또는 샘플 양식)에 그대로 담아 <b>hwpx</b> 와 <b>PDF</b> 로 만듭니다.
               </p>
               <div className="steps">
                 <span className="step"><b>1</b>올리기</span>
@@ -78,7 +78,7 @@ export default function Home({ projects, onOpen, onNew, onSample, onDelete }) {
             <tr>
               <th>학습자료 이름</th>
               <th>양식</th>
-              <th>문항</th>
+              <th>내용</th>
               <th>검토 진척</th>
               <th>만든 날</th>
               <th>고친 날</th>
@@ -99,7 +99,7 @@ export default function Home({ projects, onOpen, onNew, onSample, onDelete }) {
                     </span>
                   </td>
                   <td className="muted">{tpl?.name ?? '직접 올린 양식'}</td>
-                  <td className="num">{s.questions}</td>
+                  <td className="num">{s.total}</td>
                   <td>
                     <span className="progress"><i style={{ width: `${s.pct}%` }} /></span>
                     <span className="pct">{s.pct}%</span>

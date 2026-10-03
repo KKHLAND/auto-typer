@@ -457,3 +457,64 @@ u { text-underline-offset: 0.18em; text-decoration-thickness: 0.08em; }
   #print-root .page { box-shadow: none; break-after: page; page-break-after: always; margin: 0; }
   #print-root .page:last-child { break-after: auto; }
 }
+
+/* ═════════ 학습자료 블록 (양식의 역할별 서식 = CSS 변수) ═════════ */
+.paper-host .page { font-family: var(--body-face, 'Noto Serif KR', serif); }
+.page .u-para, .page .u-list, .page .u-h, .page .u-title { break-inside: avoid; }
+.page .u-para {
+  font-family: var(--body-face); font-size: var(--body-size, 10.5pt); font-weight: var(--body-weight, 400);
+  text-align: var(--body-align, justify); text-indent: var(--body-ti, 0); padding-left: var(--body-pad, 0);
+  line-height: var(--body-line, 1.6); margin: var(--body-prev, 0) 0 var(--body-next, 0);
+  break-inside: auto;
+}
+.page .u-list {
+  font-family: var(--list-face); font-size: var(--list-size, 10.5pt); font-weight: var(--list-weight, 400);
+  text-align: var(--list-align, justify); text-indent: var(--list-ti, -12pt); padding-left: var(--list-pad, 12pt);
+  line-height: var(--list-line, 1.6); margin: var(--list-prev, 0) 0 var(--list-next, 0);
+}
+.page .u-l2 { margin-left: 18pt; }
+.page .u-l3 { margin-left: 36pt; }
+.page .u-h { line-height: 1.45; text-indent: 0; }
+.page .u-h1 { font-family: var(--h1-face); font-size: var(--h1-size, 15pt); font-weight: var(--h1-weight, 700); text-align: var(--h1-align, left); margin: max(var(--h1-prev, 0pt), 3mm) 0 1.5mm; }
+.page .u-h2 { font-family: var(--h2-face); font-size: var(--h2-size, 13pt); font-weight: var(--h2-weight, 700); text-align: var(--h2-align, left); margin: max(var(--h2-prev, 0pt), 2.5mm) 0 1mm; }
+.page .u-h3 { font-family: var(--h3-face); font-size: var(--h3-size, 11.5pt); font-weight: var(--h3-weight, 700); text-align: var(--h3-align, left); margin: max(var(--h3-prev, 0pt), 1.5mm) 0 0.8mm; }
+.page .u-title { font-family: var(--h1-face); font-size: calc(var(--h1-size, 15pt) * 1.2); font-weight: 800; text-align: center; margin: 1mm 0 4mm; line-height: 1.35; }
+.page .u-box { font-family: var(--body-face); font-size: var(--body-size, 10.5pt); line-height: var(--body-line, 1.6); }
+.page .u-table { margin: 2mm 0 3mm; break-inside: avoid; }
+.page .u-table table { width: 100%; border-collapse: collapse; font-family: var(--body-face); font-size: var(--body-size, 10.5pt); line-height: 1.45; }
+.page .u-table th, .page .u-table td { border: 0.12mm solid #000; padding: 1mm 1.6mm; vertical-align: middle; text-align: left; }
+.page .u-table th { font-weight: 700; }
+.page .cap { text-align: center; font-size: 0.92em; margin-top: 1mm; }
+
+/* 휴대폰 폭: 머리 띠를 한 줄로 줄이고 가로 넘침을 막는다 */
+.masthead h1 { white-space: nowrap; }
+.mh-badge { white-space: nowrap; }
+@media (max-width: 640px) {
+  .masthead { padding: 14px 16px; gap: 10px; flex-wrap: nowrap; }
+  .masthead .mh-left { gap: 6px; flex: 1; min-width: 0; }
+  .masthead .mh-row { gap: 8px; flex-wrap: nowrap; }
+  .masthead .mh-logo { width: 28px; height: 28px; }
+  .masthead h1 { font-size: 22px; letter-spacing: -0.4px; }
+  .masthead .mh-badge { height: 22px; padding: 0 8px; font-size: 11.5px; }
+  .masthead p { font-size: 12.5px; line-height: 1.45; }
+  .masthead .streak { display: none; }
+  .mh-btn { width: 40px; height: 40px; border-radius: 10px; }
+  .mh-key { height: 40px; padding: 0 10px; }
+  .content { overflow-x: hidden; }
+}
+@media (max-width: 400px) {
+  .masthead .mh-badge { display: none; }
+}
+@media (max-width: 640px) {
+  .rail { overflow: hidden; justify-content: space-around; align-items: center; padding: 4px 6px; gap: 4px; }
+  .rail .plus { width: 44px; height: 44px; border-radius: 12px; }
+  .rail-item { width: auto; min-width: 56px; padding: 4px 8px; font-size: 12px; gap: 2px; }
+  .rail-item svg { width: 22px; height: 22px; }
+}
+
+/* 샘플 양식 머리: 학교명 | 학습 자료명 | 학번·이름, 아래 굵은 줄 */
+.hd-sp { display: grid; grid-template-columns: 17.6% 1fr 44.1%; align-items: center; gap: 2mm; border-bottom: 0.7mm solid #000; padding: 0 0 1.6mm; margin-bottom: 4mm; font-family: var(--body-face, 'Noto Serif KR', serif); }
+.hd-sp .l { font-size: 12pt; font-weight: 700; }
+.hd-sp .c { font-size: 16pt; font-weight: 800; text-align: center; line-height: 1.25; }
+.hd-sp .r { font-size: 10pt; text-align: right; line-height: 1.6; white-space: pre; }
+.ft-gen { white-space: pre; }

@@ -134,9 +134,9 @@ export async function convert({ files = [], text = '', settings, title, onProgre
   }
 
   const doc = docFromJson ?? newDoc(title || '새 학습자료');
-  if (!docFromJson || blocks.length) doc.items = [...(docFromJson?.items ?? []), ...assemble(blocks)];
+  if (!docFromJson || blocks.length) doc.blocks = [...(docFromJson?.blocks ?? []), ...assemble(blocks)];
   if (title) doc.title = title;
-  onProgress({ stage: 'done', message: `문항 ${doc.items.filter((x) => x.kind === 'question').length}개를 찾았습니다` });
+  onProgress({ stage: 'done', message: `내용 ${doc.blocks.length}덩이를 정리했습니다` });
   return { doc, pages, engineUsed };
 }
 
