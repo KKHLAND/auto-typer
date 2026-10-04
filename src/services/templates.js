@@ -42,7 +42,7 @@ export async function loadTemplate(id) {
     entry = { meta: t.meta, pkg, analysis: t.analysis, headerTexts: collectHeaderTexts(pkg) };
   }
   // 머리 문구에 이름 붙이기
-  entry.headerTexts = entry.headerTexts.map((h, i) => ({ ...h, label: entry.meta.labels?.[i] || '' }));
+  entry.headerTexts = entry.headerTexts.map((h, i) => ({ ...h, label: entry.meta.labels?.[i] || (h.field ? `${h.field} (필드)` : '') }));
   cache.set(id, entry);
   return entry;
 }

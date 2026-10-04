@@ -52,11 +52,40 @@ const clampLevel = (n) => Math.min(3, Math.max(1, Math.round(+n || 1)));
  *   {type, text, level?, title?, rows?, figure?, cont?, uncertain?, page?}
  * cont=true 인 문단·목록·상자는 앞 블록(앞쪽에서 넘어온 같은 글)에 이어 붙인다.
  */
+// AI 가 가끔 내는 LaTeX 기호 하나짜리 수식($\rightarrow$ 등)은 그냥 글자로
+const LATEX_SYMBOL = {
+  rightarrow: '→', to: '→', leftarrow: '←', leftrightarrow: '↔', Rightarrow: '⇒', Leftarrow: '⇐', Leftrightarrow: '⇔',
+  times: '×', cdot: '·', div: '÷', pm: '±', le: '≤', leq: '≤', ge: '≥', geq: '≥', ne: '≠', neq: '≠', circ: '○', triangle: '△',
+};
+export const fixSymbols = (s) =>
+  String(s ?? '').replace(/\$\s*\\([A-Za-z]+)\s*\$|\\(rightarrow|leftarrow|Rightarrow|leftrightarrow)\b/g, (all, a, b) => LATEX_SYMBOL[a || b] ?? all);
+
+/** AI 가 guessed 로 알려 준 낱말을 글 속에서 찾아 ⟪ ⟫ 로 감싼다 (이미 감싼 곳·못 찾은 낱말은 건너뜀) */
+export function markGuesses(text, guessed) {
+  let s = String(text ?? '');
+  for (const g of Array.isArray(guessed) ? guessed : []) {
+    const w = String(g ?? '').trim();
+    if (!w || w.length > 80) continue;
+    let from = 0;
+    for (;;) {
+      const i = s.indexOf(w, from);
+      if (i < 0) break;
+      const open = s.lastIndexOf('⟪', i);
+      const close = s.lastIndexOf('⟫', i);
+      if (open > close) { from = i + w.length; continue; } // 이미 감싼 구간 안
+      s = `${s.slice(0, i)}⟪${w}⟫${s.slice(i + w.length)}`;
+      break;
+    }
+  }
+  return s;
+}
+
 export function assemble(raw) {
   const out = [];
   for (const r of raw) {
     let type = BLOCK_TYPES.includes(r.type) ? r.type : 'paragraph';
-    const text = String(r.text ?? '').trim();
+    const text = markGuesses(fixSymbols(r.text), r.guessed).trim();
+    if (r.title) r.title = fixSymbols(r.title);
     const prev = out[out.length - 1];
     if (r.cont && prev && prev.type === type && ['paragraph', 'list', 'box'].includes(type)) {
       const joinNoSpace = /[-­]$/.test(prev.text);
@@ -70,7 +99,8 @@ export function assemble(raw) {
       type = 'paragraph';
     }
     if (type === 'table') {
-      const rows = (Array.isArray(r.rows) ? r.rows : []).map((row) => (Array.isArray(row) ? row.map((c) => String(c ?? '')) : [String(row)]));
+      const cell = (c) => markGuesses(fixSymbols(c), r.guessed);
+      const rows = (Array.isArray(r.rows) ? r.rows : []).map((row) => (Array.isArray(row) ? row.map(cell) : [cell(row)]));
       if (!rows.length) {
         if (text) out.push(newBlock('paragraph', { text, page: r.page, flag: r.uncertain ? 'check' : 'todo' }));
         continue;
@@ -91,6 +121,11 @@ export function assemble(raw) {
         flag: r.uncertain ? 'check' : 'todo',
       }),
     );
+  }
+  // 맥락으로 추정한 낱말(⟪ ⟫)이 들어 있으면 AI 가 표시를 잊었더라도 '확인 필요'
+  for (const b of out) {
+    const all = [b.text, b.title, ...(b.rows || []).flat()].join('\n');
+    if (/⟪[^⟫]*⟫/.test(all)) b.flag = 'check';
   }
   return out;
 }

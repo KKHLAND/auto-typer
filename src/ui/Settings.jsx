@@ -139,7 +139,7 @@ export default function Settings({ settings, setSettings, notify, tab: initialTa
             </tbody>
           </table>
           <h3>지원 형식</h3>
-          <p>입력: PDF(글자 PDF·스캔본·손글씨), hwpx, txt, md, json, 사진 / 출력: hwpx(한글 2014 이상), PDF.<br />예전 .hwp 는 한글에서 ‘다른 이름으로 저장 → hwpx’ 후 올려 주세요.</p>
+          <p>입력: PDF(글자 PDF·스캔본·손글씨), hwp(예전 한글), hwpx, docx, xlsx, txt, md, json, 사진 / 출력: hwpx(한글 2014 이상), PDF.<br />예전 hwp·워드·엑셀·글자 있는 PDF 는 <a href="https://github.com/KKHLAND/kordoc" target="_blank" rel="noreferrer">kordoc</a>(MIT)으로 이 컴퓨터 안에서 읽고, 스캔본·사진·손글씨는 AI(Gemini)가 읽습니다. 암호가 걸린 문서는 한글에서 암호를 푼 뒤 올려 주세요.</p>
         </div>
       )}
     </div>

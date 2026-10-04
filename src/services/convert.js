@@ -1,4 +1,4 @@
-// 변환 파이프라인: 올린 파일·붙여넣은 글 → 시험지 문서
+// 변환 파이프라인: 올린 파일·붙여넣은 글 → 학습자료 문서
 import { assemble, importJson, newDoc } from '../model.js';
 import { parseText } from '../engine/textParser.js';
 import { hwpxToText } from '../engine/hwpxReader.js';
@@ -12,7 +12,8 @@ export function fileKind(name) {
   if (ext === 'hwpx') return 'hwpx';
   if (ext === 'json') return 'json';
   if (['txt', 'md', 'markdown', 'text'].includes(ext)) return 'text';
-  if (ext === 'hwp') return 'hwp';
+  // 예전 hwp·hml·워드·엑셀은 kordoc(문서→마크다운)으로 읽는다
+  if (['hwp', 'hml', 'hwpml', 'docx', 'xlsx', 'xls'].includes(ext)) return 'office';
   return 'unknown';
 }
 
@@ -59,11 +60,16 @@ export async function convert({ files = [], text = '', settings, title, onProgre
 
   for (const file of files) {
     const kind = fileKind(file.name);
-    if (kind === 'hwp') throw new Error(`${file.name}: 예전 hwp 형식은 읽을 수 없습니다. 한글에서 '다른 이름으로 저장 → hwpx' 후 올려 주세요.`);
-    if (kind === 'unknown') throw new Error(`${file.name}: 지원하지 않는 파일입니다 (pdf, hwpx, txt, md, json, 이미지)`);
+    if (kind === 'unknown') throw new Error(`${file.name}: 지원하지 않는 파일입니다 (pdf, hwp, hwpx, docx, xlsx, txt, md, json, 이미지)`);
 
     if (kind === 'json') {
       docFromJson = importJson(JSON.parse(await file.text()));
+      continue;
+    }
+    if (kind === 'office') {
+      onProgress({ stage: 'render', status: 'running', message: `${file.name} 읽는 중 (kordoc)` });
+      if (engineUsed !== 'ai') engineUsed = 'kordoc';
+      await textToBlocks(await kordocMarkdown(await file.arrayBuffer(), file.name));
       continue;
     }
     if (kind === 'text' || kind === 'hwpx') {
@@ -98,7 +104,8 @@ export async function convert({ files = [], text = '', settings, title, onProgre
       texts.push(t.text);
     }
     const scanned = textChars < total * 80; // 글자층이 거의 없으면 스캔본
-    const wantAi = engine === 'ai' || (engine === 'auto' && hasKey);
+    // 글자 있는 PDF 는 kordoc 이 이 컴퓨터 안에서 빠르게 (제목·목록·표·밑줄까지) — 'AI 정밀'을 고를 때만 Gemini
+    const wantAi = engine === 'ai';
     if (wantAi || scanned) {
       if (!hasKey) {
         throw new Error('스캔본(또는 손글씨) PDF 는 AI 인식이 필요합니다. 설정에서 무료 Gemini API 키를 넣어 주세요.');
@@ -109,10 +116,21 @@ export async function convert({ files = [], text = '', settings, title, onProgre
         await aiPage(local[i], i, local.length);
       }
     } else {
-      const base = pages.length - local.length;
-      texts.forEach((t, i) => {
-        for (const b of parseText(t)) blocks.push({ ...b, page: base + i });
-      });
+      let md = null;
+      try {
+        onProgress({ stage: 'render', status: 'running', message: `${file.name} 구조 읽는 중 (kordoc)` });
+        md = await kordocMarkdown(await file.arrayBuffer(), file.name);
+        if (engineUsed !== 'ai') engineUsed = 'kordoc';
+      } catch (e) {
+        console.warn('kordoc 실패 — 쪽 글자층으로 대신 읽음', e);
+      }
+      if (md && md.trim()) blocks.push(...parseText(md));
+      else {
+        const base = pages.length - local.length;
+        texts.forEach((t, i) => {
+          for (const b of parseText(t)) blocks.push({ ...b, page: base + i });
+        });
+      }
     }
   }
 
@@ -138,6 +156,19 @@ export async function convert({ files = [], text = '', settings, title, onProgre
   if (title) doc.title = title;
   onProgress({ stage: 'done', message: `내용 ${doc.blocks.length}덩이를 정리했습니다` });
   return { doc, pages, engineUsed };
+}
+
+/** kordoc(https://github.com/KKHLAND/kordoc, MIT) 으로 문서 → 마크다운. 필요할 때만 불러온다(약 900KB). */
+let kordocMod = null;
+async function kordocMarkdown(buffer, name) {
+  kordocMod ??= import('../vendor/kordoc/kordoc.browser.js');
+  const { parse } = await kordocMod;
+  const r = await parse(buffer instanceof ArrayBuffer ? buffer : buffer.buffer, { images: false });
+  if (!r?.success) {
+    const msg = r?.code === 'ENCRYPTED' || /암호|password/i.test(r?.error || '') ? '암호가 걸린 문서입니다. 한글에서 암호를 푼 뒤 올려 주세요.' : r?.error || '읽지 못했습니다';
+    throw new Error(`${name}: ${msg}`);
+  }
+  return r.markdown || '';
 }
 
 function splitChunks(t, size) {

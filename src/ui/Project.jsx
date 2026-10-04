@@ -153,7 +153,7 @@ export default function Project({ record, pages, onSave, onBack, notify }) {
             <button className="pill-btn" onClick={() => setBlocks(blocks.map((x) => ({ ...x, flag: 'done' })))}><Ic.Check size={13} /> 모두 검토 완료</button>
             <button className="pill-btn" onClick={exportJson}><Ic.Doc size={13} /> JSON</button>
             <span style={{ marginLeft: 'auto', fontSize: 13, color: 'var(--ink-3)' }}>
-              {rec.engineUsed === 'ai' ? 'AI 인식' : '규칙 인식'} · 자동 저장
+              {rec.engineUsed === 'ai' ? 'AI 인식' : rec.engineUsed === 'kordoc' ? '문서 변환(kordoc)' : '규칙 인식'} · 자동 저장
             </span>
           </div>
         )}

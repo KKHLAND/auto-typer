@@ -520,3 +520,8 @@ u { text-underline-offset: 0.18em; text-decoration-thickness: 0.08em; }
 .ft-gen { white-space: pre; }
 
 .theme-sample .ft-gen { border-top: 0.25mm solid #000; padding-top: 1.5mm; font-size: 9pt; font-family: var(--body-face); }
+
+/* AI 가 맥락으로 추정한 글자: 화면에서만 노란 표시, 인쇄(PDF)에는 표시 없음 */
+mark.guess { background: #ffe58a; color: inherit; border-radius: 2px; box-shadow: 0 0 0 1px #f5c400 inset; padding: 0 1px; }
+@media print { mark.guess { background: none; box-shadow: none; padding: 0; } }
+.guess-note { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; background: #fff8db; border: 1px solid #f5d76e; color: #7a5a00; border-radius: 10px; padding: 8px 12px; font-size: 13px; margin: 0 0 12px; }

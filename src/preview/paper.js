@@ -12,7 +12,8 @@ export function buildUnits(doc) {
     const id = b.id;
     switch (b.type) {
       case 'title':
-        U.push({ cls: 'u-title', html: inlineHtml(b.text), id, keepNext: true });
+        // 두 번째 자료 제목부터는 새 쪽에서 (hwpx 와 같게)
+        U.push({ cls: 'u-title', html: inlineHtml(b.text), id, keepNext: true, pageBreak: U.length > 0 });
         break;
       case 'heading': {
         const lv = Math.min(3, Math.max(1, b.level || 1));
@@ -157,6 +158,7 @@ export async function layout(host, { doc, geometry, theme, headerTexts, css }) {
   let body = newPage();
   for (let i = 0; i < units.length; i++) {
     const u = units[i];
+    if (u.pageBreak && body.children.length) body = newPage();
     const group = [u];
     // 발문·지시문은 다음 단위와 함께 (단 맨 아래 홀로 남지 않게)
     let j = i;

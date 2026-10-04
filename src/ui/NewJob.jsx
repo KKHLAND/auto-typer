@@ -3,7 +3,8 @@ import * as Ic from './icons.jsx';
 import { convert, fileKind } from '../services/convert.js';
 import { listTemplates } from '../services/templates.js';
 
-const KIND_LABEL = { pdf: 'PDF', image: '이미지', hwpx: 'HWPX', json: 'JSON', text: 'TXT', hwp: 'HWP', unknown: '?' };
+const KIND_LABEL = { pdf: 'PDF', image: '이미지', hwpx: 'HWPX', json: 'JSON', text: 'TXT', unknown: '?' };
+const extLabel = (name) => { const k = fileKind(name); return k === 'office' ? name.split('.').pop().toUpperCase() : KIND_LABEL[k]; };
 
 export default function NewJob({ settings, onCancel, onDone, onSettings, notify }) {
   const [tab, setTab] = useState('file');
@@ -104,14 +105,14 @@ export default function NewJob({ settings, onCancel, onDone, onSettings, notify 
                 >
                   <Ic.Upload size={40} />
                   <h2>파일을 끌어다 놓거나 골라 주세요</h2>
-                  <p>PDF(스캔본·손글씨 포함) · HWPX · TXT · MD · JSON · 사진(JPG·PNG)</p>
+                  <p>PDF(스캔본·손글씨 포함) · HWP · HWPX · DOCX · XLSX · TXT · MD · JSON · 사진(JPG·PNG)</p>
                   <button className="btn primary lg" onClick={() => input.current.click()}>파일 고르기</button>
                   <input
                     ref={input}
                     type="file"
                     multiple
                     hidden
-                    accept=".pdf,.hwpx,.txt,.md,.markdown,.json,.png,.jpg,.jpeg,.webp,image/*"
+                    accept=".pdf,.hwp,.hwpx,.hml,.docx,.xlsx,.xls,.txt,.md,.markdown,.json,.png,.jpg,.jpeg,.webp,image/*"
                     onChange={(e) => {
                       addFiles(e.target.files);
                       e.target.value = '';
@@ -122,7 +123,7 @@ export default function NewJob({ settings, onCancel, onDone, onSettings, notify 
                   <div className="filelist">
                     {files.map((f, i) => (
                       <div className="file" key={i}>
-                        <span className="ext">{KIND_LABEL[fileKind(f.name)]}</span>
+                        <span className="ext">{extLabel(f.name)}</span>
                         <span className="grow">{f.name}</span>
                         <span className="muted" style={{ fontSize: 12, color: 'var(--ink-3)' }}>{(f.size / 1024).toFixed(0)} KB</span>
                         <button className="icon-btn" onClick={() => setFiles(files.filter((_, k) => k !== i))} title="빼기">
@@ -130,7 +131,7 @@ export default function NewJob({ settings, onCancel, onDone, onSettings, notify 
                         </button>
                       </div>
                     ))}
-                    <div className="hint">여러 파일은 올린 순서대로 이어 붙여 한 학습자료로 만듭니다. 예전 .hwp 는 한글에서 hwpx 로 저장한 뒤 올려 주세요.</div>
+                    <div className="hint">여러 파일은 올린 순서대로 이어 붙여 한 학습자료로 만듭니다. 예전 .hwp·워드·엑셀·글자 있는 PDF 는 kordoc 으로 이 컴퓨터 안에서 바로 읽습니다.</div>
                   </div>
                 )}
               </>

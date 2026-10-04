@@ -2,12 +2,15 @@
 // 편집기·AI·파서·hwpx 작성기·미리보기가 모두 이 한 가지 표기를 공유한다.
 //
 //   __밑줄__     **굵게**     $수식$ (한글 수식 스크립트)     [빈칸]
+//   ⟪추정⟫  흐린 손글씨를 AI 가 맥락으로 짐작해 채운 낱말 — 편집·미리보기에서만 노란 표시, hwpx·PDF 에는 글자만
 //
 // 줄바꿈(\n)은 문단 구분이다.
 
-const TOKEN = /(__[^_\n]+?__|\*\*[^*\n]+?\*\*|\$[^$\n]+?\$|\[빈칸\])/g;
+// 수식 $…$: 여는 $ 바로 뒤와 닫는 $ 바로 앞에 공백이 없고, 닫는 $ 뒤에 숫자가 오지 않을 때만
+// (pandoc 규칙) — "$40 ② $50" 같은 달러 금액이 수식으로 잘못 묶이지 않게
+const TOKEN = /(⟪[^⟪⟫\n]+⟫|__[^_\n]+?__|\*\*[^*\n]+?\*\*|\$(?=\S)[^$\n]*?\S\$(?!\d)|\$\S\$(?!\d)|\[빈칸\])/g;
 
-/** 한 줄(문단)을 run 배열로 쪼갠다: {text, u, b, eq, blank} */
+/** 한 줄(문단)을 run 배열로 쪼갠다: {text, u, b, eq, blank, guess} */
 export function parseInline(line) {
   const runs = [];
   let last = 0;
@@ -15,6 +18,7 @@ export function parseInline(line) {
     if (m.index > last) runs.push({ text: line.slice(last, m.index) });
     const tok = m[0];
     if (tok === '[빈칸]') runs.push({ text: '', blank: true });
+    else if (tok.startsWith('⟪')) runs.push(...nested(tok.slice(1, -1), { guess: true }));
     else if (tok.startsWith('__')) runs.push(...nested(tok.slice(2, -2), { u: true }));
     else if (tok.startsWith('**')) runs.push(...nested(tok.slice(2, -2), { b: true }));
     else runs.push({ text: tok.slice(1, -1), eq: true });
@@ -42,8 +46,13 @@ export function plain(text) {
     .replace(/__([^_\n]+?)__/g, '$1')
     .replace(/\*\*([^*\n]+?)\*\*/g, '$1')
     .replace(/\$([^$\n]+?)\$/g, '$1')
-    .replace(/\[빈칸\]/g, '(    )');
+    .replace(/\[빈칸\]/g, '(    )')
+    .replace(/[⟪⟫]/g, '');
 }
+
+/** 추정 표시(⟪ ⟫)만 지운다 — 선생님이 확인을 마친 뒤 */
+export const clearGuesses = (text) => String(text ?? '').replace(/[⟪⟫]/g, '');
+export const hasGuess = (text) => /⟪[^⟫]*⟫/.test(String(text ?? ''));
 
 export function escapeHtml(s) {
   return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -75,6 +84,7 @@ export function inlineHtml(line) {
       let h = r.eq ? `<span class="eq">${eqHtml(r.text)}</span>` : escapeHtml(r.text);
       if (r.b) h = `<b>${h}</b>`;
       if (r.u) h = `<u>${h}</u>`;
+      if (r.guess) h = `<mark class="guess" title="AI가 맥락으로 추정한 글자 — 확인해 주세요">${h}</mark>`;
       return h;
     })
     .join('');

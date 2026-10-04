@@ -1,7 +1,7 @@
 import { useRef } from 'react';
 import * as Ic from './icons.jsx';
 import { TYPE_LABEL } from '../model.js';
-import { inlineHtml, paragraphs } from '../engine/markup.js';
+import { clearGuesses, hasGuess, inlineHtml, paragraphs } from '../engine/markup.js';
 
 const FLAGS = [
   ['todo', '검토 전', 'gray'],
@@ -132,6 +132,18 @@ export default function BlockEditor({ block: b, pageImage, onChange, onClose, on
             </div>
           )}
         </div>
+
+        {(hasGuess(b.text) || hasGuess(b.title) || (b.rows || []).flat().some(hasGuess)) && (
+          <div className="guess-note" role="note">
+            <span><mark className="guess">노란 표시</mark>는 흐린 손글씨를 AI가 맥락으로 짐작해 채운 곳입니다. 원본과 대조해 고치세요. hwpx·PDF 에는 표시 없이 글자만 들어갑니다.</span>
+            <button
+              className="btn sm"
+              onClick={() => set({ text: clearGuesses(b.text), title: b.title == null ? b.title : clearGuesses(b.title), ...(b.rows ? { rows: b.rows.map((r) => r.map(clearGuesses)) } : {}), flag: 'done' })}
+            >
+              확인했어요 — 표시 지우기
+            </button>
+          </div>
+        )}
 
         {b.type !== 'table' && b.type !== 'figure' && <MarkBar wrap={wrap} />}
 

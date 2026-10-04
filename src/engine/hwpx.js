@@ -338,15 +338,31 @@ export function collectHeaderTexts(pkg) {
   const out = [];
   for (const file of HEADER_FILES(pkg)) {
     const { xml } = headerScope(pkg, file);
+    const ranges = fieldRanges(xml);
     let i = 0;
     for (const m of xml.matchAll(/<hp:t>([\s\S]*?)<\/hp:t>/g)) {
       const text = tText(m[1]);
-      if (text.trim()) out.push({ key: `${file}@${i}`, file, index: i, text });
+      const f = inField(ranges, m.index);
+      // field = 필드 이름(개방형·학번·이름 등) — 누름틀·메일 머지 자리
+      if (text.trim()) out.push({ key: `${file}@${i}`, file, index: i, text, ...(f ? { field: f.name || text.replace(/[{}]/g, '') } : {}) });
       i++;
     }
   }
   return out;
 }
+
+/** 누름틀·메일 머지 필드의 범위 [{start, end, name}] (fieldBegin ~ 짝이 되는 fieldEnd) */
+export function fieldRanges(xml) {
+  const out = [];
+  for (const m of xml.matchAll(/<hp:fieldBegin\b[^>]*\bid="(\d+)"[^>]*>([\s\S]*?)<\/hp:fieldBegin>/g)) {
+    const endTag = new RegExp(`<hp:fieldEnd\\b[^>]*beginIDRef="${m[1]}"`).exec(xml.slice(m.index));
+    if (!endTag) continue;
+    const name = /<hp:stringParam name="Command">([^<]*)<\/hp:stringParam>/.exec(m[2])?.[1] || '';
+    out.push({ start: m.index, end: m.index + endTag.index, name });
+  }
+  return out;
+}
+const inField = (ranges, pos) => ranges.find((r) => pos > r.start && pos < r.end);
 
 function applyHeaderEdits(pkg, edits) {
   const byFile = {};
@@ -360,22 +376,29 @@ function applyHeaderEdits(pkg, edits) {
     let i = 0;
     const nx = scope.xml.replace(/<hp:t>([\s\S]*?)<\/hp:t>/g, (all) => {
       const idx = i++;
-      return idx in map ? `<hp:t>${esc(map[idx])}</hp:t>` : all;
+      // 빈 값은 공백 하나로 — 빈 필드는 한글이 '손상된 문서'로 거부한다
+      return idx in map ? `<hp:t>${esc(map[idx] === '' ? ' ' : map[idx])}</hp:t>` : all;
     });
     scope.put(nx);
   }
 }
 
-/** p0 의 최상위 run 직속 본문 글자(예: 수능 양식의 '[1~3] 다음 글을…')는 비운다 */
+/**
+ * p0 의 최상위 run 직속 본문 글자(예: 수능 양식의 '[1~3] 다음 글을…')는 비운다.
+ * 단 필드(학번·이름 같은 누름틀·메일 머지) 안의 글자와 자리 맞춤용 공백은 그대로 둔다
+ * — 빈 필드는 한글이 '손상된 문서'로 여겨 열지 않는다.
+ */
 function clearP0BodyText(p0) {
   let out = '';
   let sub = 0;
   let last = 0;
+  const ranges = fieldRanges(p0);
   const re = /<(\/?)hp:subList(?=[\s>/])[^>]*?(\/?)>|<hp:t>[\s\S]*?<\/hp:t>/g;
   let m;
   while ((m = re.exec(p0))) {
     if (m[0].startsWith('<hp:t>')) {
-      if (sub === 0) {
+      const keep = inField(ranges, m.index) || !tText(m[0].slice(6, -7)).trim();
+      if (sub === 0 && !keep) {
         out += p0.slice(last, m.index) + '<hp:t/>';
         last = re.lastIndex;
       }
@@ -521,8 +544,26 @@ export function eqWidthEm(script) {
   return Math.max(0.6, em * 1.1);
 }
 
+/**
+ * 수식 스크립트를 한글 수식 문법으로 정리한다. 한글 수식기는 이상한 스크립트(예: 끝에 \ 하나)에서
+ * 멈출 수 있으므로, AI·변환기가 섞어 낸 LaTeX 를 바꾸고 남은 역슬래시는 지운다.
+ */
+export function toHwpEquation(script) {
+  let s = String(script);
+  for (let k = 0; k < 3; k++) s = s.replace(/\\[dt]?frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g, '{$1} over {$2}');
+  return s
+    .replace(/\\left\b/g, 'LEFT ').replace(/\\right\b/g, 'RIGHT ')
+    .replace(/\\(?:neq|ne)\b/g, '!=').replace(/\\(?:leq|le)\b/g, '<=').replace(/\\(?:geq|ge)\b/g, '>=')
+    .replace(/\\(?:rightarrow|to)\b/g, '->').replace(/\\leftarrow\b/g, '<-')
+    .replace(/\\([A-Za-z]+)/g, '$1 ') // \sqrt → sqrt, \alpha → alpha, \times → times …
+    .replace(/\\/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function eqXml(script, charHeight) {
   // 수식: 한글이 열 때 스크립트로 다시 조판한다. 크기는 대략치.
+  script = toHwpEquation(script);
   const w = Math.max(500, Math.round(eqWidthEm(script) * charHeight));
   return (
     `<hp:equation id="${nextObjId()}" zOrder="0" numberingType="EQUATION" textWrap="TOP_AND_BOTTOM" textFlow="BOTH_SIDES" lock="0" dropcapstyle="None" version="Equation Version 60" baseLine="86" textColor="#000000" baseUnit="${charHeight}" lineMode="CHAR" font="HancomEQN">` +
@@ -588,7 +629,9 @@ class Writer {
       charPr: this.hdr.charPr(this.R.h1.charPr, { b: true, size: Math.round(Math.max(h1H * 1.15, bodyH * 1.6)) }),
     };
     this.centerPara = this.hdr.paraPr(B.paraPr, { align: 'CENTER', intent: 0, left: 0, noHeading: true });
-    this.cellPara = this.hdr.paraPr(B.paraPr, { intent: 0, left: 0, noHeading: true, prev: 0, next: 0 });
+    // 표 칸은 왼쪽 정렬 — 양쪽 정렬이면 좁은 칸에서 글자 사이가 벌어진다
+    this.cellPara = this.hdr.paraPr(B.paraPr, { align: 'LEFT', intent: 0, left: 0, noHeading: true, prev: 0, next: 0 });
+    this.boxPara = this.hdr.paraPr(B.paraPr, { intent: 0, left: 0, noHeading: true, prev: 0, next: 0 });
   }
 
   runs(text, baseCp) {
@@ -597,7 +640,8 @@ class Writer {
         if (r.eq) return `<hp:run charPrIDRef="${baseCp}">${eqXml(r.text, this.charHeight)}<hp:t/></hp:run>`;
         const cp = this.hdr.charPr(baseCp, { u: !!(r.u || r.blank), b: !!r.b });
         const t = r.blank ? '          ' : r.text;
-        return `<hp:run charPrIDRef="${cp}"><hp:t>${esc(t)}</hp:t></hp:run>`;
+        // 탭은 글자가 아니라 <hp:tab/> 요소로 (글 속 날것의 탭 문자는 한글이 문서를 열다 멈추게 한다)
+        return `<hp:run charPrIDRef="${cp}"><hp:t>${esc(t).replace(/\t/g, '<hp:tab width="2000" leader="0" type="1"/>')}</hp:t></hp:run>`;
       })
       .join('');
   }
@@ -625,7 +669,7 @@ class Writer {
     let inner = '';
     if (title) inner += this.para(this.centerPara, '0', this.runs(title, B.charPr));
     inner += paragraphs(text)
-      .map((line) => this.para(this.cellPara, '0', this.runs(line, B.charPr)))
+      .map((line) => this.para(this.boxPara, '0', this.runs(line, B.charPr)))
       .join('');
     const lines = paragraphs(text).reduce((n, l) => n + Math.max(1, Math.ceil(plain(l).length / 40)), title ? 1 : 0);
     const H = Math.max(1500, Math.round(lines * this.charHeight * 1.7) + 600);
@@ -718,10 +762,13 @@ class Writer {
     blocks.forEach((b, i) => {
       const prev = blocks[i - 1];
       switch (b.type) {
-        case 'title':
-          xs.push(this.textParas(b.text, R.title));
+        case 'title': {
+          // 두 번째 자료 제목부터는 새 쪽에서 (예: 학생마다 한 장씩인 활동지 묶음)
+          const t = this.textParas(b.text, R.title);
+          xs.push(i > 0 ? t.replace('pageBreak="0"', 'pageBreak="1"') : t);
           xs.push(this.spacer());
           break;
+        }
         case 'heading': {
           const lv = Math.min(3, Math.max(1, b.level || 1));
           if (i > 0 && lv <= 2 && prev?.type !== 'title') xs.push(this.spacer());

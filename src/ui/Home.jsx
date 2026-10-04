@@ -64,7 +64,7 @@ export default function Home({ projects, onOpen, onNew, onSample, onDelete }) {
             <h2>첫 학습자료를 변환해 보세요</h2>
             <p>회원가입도, 페이지 제한도 없습니다.</p>
             <div className="formats">
-              {['PDF', '스캔·손글씨', 'HWPX', 'TXT', 'MD', 'JSON', '이미지', '붙여넣기'].map((f) => (
+              {['PDF', '스캔·손글씨', 'HWP', 'HWPX', 'DOCX', 'XLSX', 'TXT', 'MD', 'JSON', '이미지', '붙여넣기'].map((f) => (
                 <span key={f} className="chip gray">{f}</span>
               ))}
             </div>
