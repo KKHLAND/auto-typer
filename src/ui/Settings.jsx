@@ -60,7 +60,7 @@ export default function Settings({ settings, setSettings, notify, tab: initialTa
             </div>
           </div>
           <div className="kv">
-            <div className="k">모델<small>최신 Flash 계열이 빠르고 무료 사용량이 넉넉합니다.</small></div>
+            <div className="k">모델<small>기본값 gemini-flash-latest 는 Google 이 늘 최신 Flash 모델로 바꿔 주어, 새 모델이 나오면 자동으로 씁니다.</small></div>
             <div className="row-inline">
               {models.length ? (
                 <select className="select" style={{ maxWidth: 380 }} value={settings.model} onChange={(e) => setSettings({ ...settings, model: e.target.value })}>

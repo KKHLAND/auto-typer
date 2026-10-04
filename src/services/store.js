@@ -37,11 +37,23 @@ export const all = (store) => tx(store, 'readonly', (s) => s.getAll());
 
 // ── 설정 (가벼운 값은 localStorage) ──
 const SKEY = 'auto-typer/settings/v1';
+// 모델 기본값은 늘 최신 Flash 를 가리키는 별칭 (gemini.js 의 DEFAULT_MODEL 과 같게)
+const LATEST_MODEL = 'gemini-flash-latest';
+const MODEL_VER = 2; // 2: 기본 모델을 'gemini-flash-latest' 로 — 예전에 특정 버전으로 고정된 설정은 한 번 바꿔 준다
+
 export function loadSettings() {
+  const base = { apiKey: '', model: LATEST_MODEL, handwriting: 'include', engine: 'auto', modelVer: MODEL_VER };
   try {
-    return { apiKey: '', model: '', handwriting: 'include', engine: 'auto', ...JSON.parse(localStorage.getItem(SKEY) || '{}') };
+    const saved = JSON.parse(localStorage.getItem(SKEY) || '{}');
+    const s = { ...base, ...saved };
+    if ((saved.modelVer ?? 0) < MODEL_VER || !s.model) {
+      s.model = LATEST_MODEL;
+      s.modelVer = MODEL_VER;
+      saveSettings(s);
+    }
+    return s;
   } catch {
-    return { apiKey: '', model: '', handwriting: 'include', engine: 'auto' };
+    return base;
   }
 }
 export function saveSettings(s) {

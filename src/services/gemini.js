@@ -2,7 +2,8 @@ import { fixLatexEscapes } from '../model.js';
 // Gemini 호출 (선생님 본인 키, 브라우저에서 Google 로 직접 — 우리 서버는 없다)
 const BASE = 'https://generativelanguage.googleapis.com/v1beta';
 
-export const DEFAULT_MODEL = 'gemini-2.5-flash';
+// 'gemini-flash-latest' 는 Google 이 늘 최신 Flash 모델로 바꿔 주는 별칭 — 새 모델이 나와도 코드를 고칠 필요가 없다
+export const DEFAULT_MODEL = 'gemini-flash-latest';
 
 /** 키로 쓸 수 있는 모델 목록 (이미지 입력 가능한 gemini 계열) */
 export async function listModels(key) {
@@ -15,8 +16,9 @@ export async function listModels(key) {
     .sort((a, b) => rank(b.id) - rank(a.id));
 }
 
-// 최신·flash 우선 (무료 사용량이 넉넉한 쪽)
+// 최신·flash 우선 (무료 사용량이 넉넉한 쪽). 늘 최신을 가리키는 기본 별칭은 맨 위에.
 function rank(id) {
+  if (id === DEFAULT_MODEL) return 1e6;
   const v = parseFloat(/gemini-(\d+(?:\.\d+)?)/.exec(id)?.[1] ?? '0');
   return v * 10 + (/flash/.test(id) ? 3 : 0) + (/pro/.test(id) ? 1 : 0) - (/preview|exp/.test(id) ? 2 : 0) - (/lite/.test(id) ? 1 : 0);
 }
