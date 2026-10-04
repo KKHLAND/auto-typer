@@ -26,6 +26,7 @@ async function tx(store, mode, fn) {
     const out = fn(s);
     t.oncomplete = () => res(out?.result ?? out);
     t.onerror = () => rej(t.error);
+    t.onabort = () => rej(t.error || new Error('저장소 작업이 중단되었습니다 (저장 공간 부족?)'));
   });
 }
 

@@ -197,7 +197,7 @@ export default function NewJob({ settings, onCancel, onDone, onSettings, notify 
               </div>
               <div className="hint">
                 {handwriting === 'include'
-                  ? '손으로 쓴 판서·필기·원고를 빠르게 읽어 내용 그대로 깔끔한 문서로 정리합니다. 흐린 글자는 ‘확인 필요’로 표시합니다.'
+                  ? '손으로 쓴 판서·필기·원고를 빠르게 읽어 내용 그대로 깔끔한 문서로 정리합니다. 흐린 글자는 맥락으로 채우고 노란색으로 표시해 ‘확인 필요’로 둡니다.'
                   : '풀이 흔적·체크·낙서가 있는 자료도 인쇄된 내용만 옮깁니다.'}
               </div>
             </div>

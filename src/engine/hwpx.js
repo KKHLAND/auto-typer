@@ -441,7 +441,7 @@ export class HeaderEditor {
     this.cache.set(k, id);
     return id;
   }
-  /** paraPr 파생: {align, intent, left, prev, next, noHeading} (HWPUNIT, hp:case 기준) */
+  /** paraPr 파생: {align, intent, left, prev, next, noHeading, line(줄 간격 %)} (HWPUNIT, hp:case 기준) */
   paraPr(base, o) {
     const k = `p|${base}|${JSON.stringify(o)}`;
     if (this.cache.has(k)) return this.cache.get(k);
@@ -464,6 +464,7 @@ export class HeaderEditor {
       );
       if (!/<hp:switch>/.test(x)) x = x.replace(new RegExp(`<hc:${name} value="-?\\d+"`), `<hc:${name} value="${v}"`);
     };
+    if (o.line) x = x.replace(/<hh:lineSpacing type="[A-Z_]+" value="\d+"/g, `<hh:lineSpacing type="PERCENT" value="${o.line}"`);
     setM('intent', o.intent);
     setM('left', o.left);
     setM('prev', o.prev);
@@ -582,7 +583,9 @@ class Writer {
     this.hdr = new HeaderEditor(readText(pkg, 'Contents/header.xml'));
     this.opts = opts;
     this.images = [];
-    this.imgSeq = Object.keys(pkg.files).filter((k) => k.startsWith('BinData/')).length + 1;
+    // 새 그림 이름은 양식에 이미 있는 이름(BinData 파일·매니페스트 id)과 겹치지 않게
+    const used = [...Object.keys(pkg.files), readText(pkg, 'Contents/content.hpf') ?? ''].join(' ');
+    this.imgSeq = Math.max(0, ...[...used.matchAll(/image(\d+)/g)].map((m) => +m[1])) + 1;
 
     const P = this.p;
     const B = P.body;
@@ -681,7 +684,7 @@ class Writer {
     if (!rows?.length) return '';
     const bf = this.hdr.boxBorder();
     const W = this.a.geometry.colWidth - 200;
-    const cols = Math.max(...rows.map((r) => r.length));
+    const cols = Math.max(1, ...rows.map((r) => r.length));
     const cw = Math.floor(W / cols);
     const B = this.R.body;
     const boldCp = this.hdr.charPr(B.charPr, { b: true });
@@ -814,8 +817,20 @@ export function buildHwpx(templatePkg, doc, opts = {}) {
   writeText(pkg, 'Contents/section0.xml', sec.slice(0, s0) + p0 + body + '</hs:sec>');
   writeText(pkg, 'Contents/header.xml', w.hdr.xml);
 
-  // 매니페스트: 쓰지 않는 BinData 정리 + 새 그림 등록
   let hpf = readText(pkg, 'Contents/content.hpf');
+  // 양식의 둘째 구역부터는 원래 내용이라 버린다 (본문은 첫 구역에 새로 쓴다)
+  const extra = Object.keys(pkg.files).filter((k) => /^Contents\/section([1-9]\d*)\.xml$/.test(k));
+  if (extra.length) {
+    for (const k of extra) {
+      const id = /section\d+/.exec(k)[0];
+      delete pkg.files[k];
+      hpf = hpf.replace(new RegExp(`<opf:item id="${id}"[^>]*/>`), '').replace(new RegExp(`<opf:itemref idref="${id}"[^>]*/>`), '');
+    }
+    w.hdr.xml = w.hdr.xml.replace(/(<hh:head\b[^>]*\bsecCnt=")\d+"/, (_, a) => `${a}1"`);
+    writeText(pkg, 'Contents/header.xml', w.hdr.xml);
+  }
+
+  // 매니페스트: 쓰지 않는 BinData 정리 + 새 그림 등록
   const allXml = Object.keys(pkg.files)
     .filter((k) => k.endsWith('.xml'))
     .map((k) => readText(pkg, k))
@@ -831,6 +846,11 @@ export function buildHwpx(templatePkg, doc, opts = {}) {
     .join('');
   hpf = hpf.replace('<opf:item id="section0"', items + '<opf:item id="section0"');
   if (doc.title) hpf = hpf.replace(/<opf:title>[\s\S]*?<\/opf:title>|<opf:title\/>/, `<opf:title>${esc(doc.title)}</opf:title>`);
+  // 양식 원본의 문서 정보(만든 사람·마지막 저장한 사람·주제·날짜 등)는 남기지 않는다
+  hpf = hpf.replace(
+    /(<opf:meta name="(?:creator|lastsaveby|subject|description|keyword|date)"[^>]*>)[\s\S]*?(<\/opf:meta>)/g,
+    '$1$2',
+  );
   writeText(pkg, 'Contents/content.hpf', hpf);
 
   // 미리보기 텍스트

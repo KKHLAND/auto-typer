@@ -87,6 +87,8 @@ export function pageSpec(geometry) {
     ml: g.margin.left / MM,
     mr: g.margin.right / MM,
     mt: (g.margin.top + g.margin.header) / MM / 1.35,
+    top: g.margin.top / MM, // 머리말이 시작하는 자리
+    head: g.margin.header / MM, // 머리말 높이
     mb: (g.margin.bottom + g.margin.footer) / MM / 1.35,
     cols: g.cols,
     gap: g.gap / MM,
@@ -95,17 +97,17 @@ export function pageSpec(geometry) {
 
 // ── 테마별 머리·꼬리 ──
 // sample: 머리 문구 = [쪽 번호 앞, 쪽 번호 뒤, 학교명, 학습 자료명, 학번·이름(한 줄)]
-function headerHtml(theme, T) {
+//   hwpx 에서는 머리 표가 머리말에 있어 모든 쪽에 되풀이된다 → 미리보기도 쪽마다, 머리말 높이 그대로
+const HEAD_GAP = 4; // mm — 머리 표와 본문 사이
+const REPEAT_HEAD = new Set(['sample']);
+function headerHtml(theme, T, S) {
   const t = (i, d = '') => esc(T[i] ?? d);
   if (theme === 'sample') {
-    return `<div class="hd-sp"><div class="l">${t(2)}</div><div class="c">${t(3)}</div><div class="r">${t(4)}</div></div>`;
+    const h = Math.max(8, S.head - HEAD_GAP);
+    return `<div class="hd-sp" style="height:${h}mm;margin-bottom:${HEAD_GAP}mm"><div class="l">${t(2)}</div><div class="c">${t(3)}</div><div class="r">${t(4)}</div></div>`;
   }
   const lines = T.slice(0, 4).filter(Boolean);
   return `<div class="hd-gen">${lines.map((l, i) => `<div class="${i === 0 ? 'b' : ''}">${esc(l)}</div>`).join('')}</div>`;
-}
-
-function runningHead() {
-  return '';
 }
 
 function footerHtml(theme, T, n, total) {
@@ -134,8 +136,9 @@ export async function layout(host, { doc, geometry, theme, headerTexts, css }) {
     const n = pages.length + 1;
     const pg = document.createElement('section');
     pg.className = 'page';
-    pg.style.cssText = `width:${S.w}mm;height:${S.h}mm;padding:${S.mt}mm ${S.mr}mm ${S.mb}mm ${S.ml}mm`;
-    pg.innerHTML = `${runningHead(theme, headerTexts, n)}${n === 1 ? headerHtml(theme, headerTexts) : ''}<div class="body"></div><div class="foot"></div>`;
+    const repeat = REPEAT_HEAD.has(theme);
+    pg.style.cssText = `width:${S.w}mm;height:${S.h}mm;padding:${repeat ? S.top : S.mt}mm ${S.mr}mm ${S.mb}mm ${S.ml}mm`;
+    pg.innerHTML = `${repeat || n === 1 ? headerHtml(theme, headerTexts, S) : ''}<div class="body"></div><div class="foot"></div>`;
     const body = pg.querySelector('.body');
     host.appendChild(pg);
     // 단 채우기(column-fill:auto)는 명시적 높이가 있어야 왼쪽 단→오른쪽 단으로 흐른다

@@ -42,12 +42,10 @@ export function paragraphs(text) {
 
 /** 서식 표기를 지운 순수 텍스트 */
 export function plain(text) {
-  return String(text ?? '')
-    .replace(/__([^_\n]+?)__/g, '$1')
-    .replace(/\*\*([^*\n]+?)\*\*/g, '$1')
-    .replace(/\$([^$\n]+?)\$/g, '$1')
-    .replace(/\[빈칸\]/g, '(    )')
-    .replace(/[⟪⟫]/g, '');
+  // parseInline 과 같은 규칙으로 — "$40 ② $50" 같은 금액의 $ 는 지우지 않는다
+  return paragraphs(text)
+    .map((line) => parseInline(line).map((r) => (r.blank ? '(    )' : r.text)).join(''))
+    .join('\n');
 }
 
 /** 추정 표시(⟪ ⟫)만 지운다 — 선생님이 확인을 마친 뒤 */

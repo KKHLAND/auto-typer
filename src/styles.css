@@ -513,7 +513,7 @@ u { text-underline-offset: 0.18em; text-decoration-thickness: 0.08em; }
 }
 
 /* 샘플 양식 머리: 학교명 | 학습 자료명 | 학번·이름, 아래 굵은 줄 */
-.hd-sp { display: grid; grid-template-columns: 28.4% 1fr 30.6%; align-items: end; gap: 0; border-bottom: 0.25mm solid #000; padding: 0 0 1.6mm; margin-bottom: 4mm; font-family: var(--body-face, 'Noto Serif KR', serif); }
+.hd-sp { display: grid; grid-template-columns: 28.4% 1fr 30.6%; align-items: end; gap: 0; border-bottom: 0.25mm solid #000; padding: 0 0 1.6mm; margin-bottom: 4mm; box-sizing: border-box; flex: none; font-family: var(--body-face, 'Noto Serif KR', serif); }
 .hd-sp .l { font-size: 12pt; font-weight: 700; }
 .hd-sp .c { align-self: center; font-size: 18pt; font-weight: 800; text-align: center; line-height: 1.25; }
 .hd-sp .r { font-size: 10pt; text-align: right; line-height: 1.6; white-space: pre; }

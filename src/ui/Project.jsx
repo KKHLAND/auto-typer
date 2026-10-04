@@ -27,6 +27,7 @@ export default function Project({ record, pages, onSave, onBack, notify }) {
   const [headerOpen, setHeaderOpen] = useState(false);
   const [pageCount, setPageCount] = useState(null);
   const saveT = useRef(null);
+  const pending = useRef(null); // 아직 저장하지 않은 최신 기록
   const doc = rec.doc;
   const blocks = doc.blocks || [];
 
@@ -41,10 +42,21 @@ export default function Project({ record, pages, onSave, onBack, notify }) {
   const update = (nextDoc, extra = {}) => {
     const next = { ...rec, ...extra, doc: nextDoc };
     setRec(next);
+    pending.current = next;
     clearTimeout(saveT.current);
-    saveT.current = setTimeout(() => onSave(next), 500);
+    saveT.current = setTimeout(() => {
+      pending.current = null;
+      onSave(next);
+    }, 500);
   };
-  useEffect(() => () => clearTimeout(saveT.current), []);
+  // 화면을 떠날 때 0.5초 안에 고친 내용도 버리지 않고 저장
+  useEffect(
+    () => () => {
+      clearTimeout(saveT.current);
+      if (pending.current) onSave(pending.current);
+    },
+    [], // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
   const setBlocks = (bs) => update({ ...doc, blocks: bs });
   const stats = reviewStats(doc);
@@ -309,8 +321,11 @@ function HeaderModal({ entry, doc, onClose, onSave }) {
             className="btn primary"
             onClick={() => {
               const edits = {};
+              const ti = entry.meta.titleIndex;
               entry.headerTexts.forEach((h, i) => {
-                if (vals[i] !== h.text) edits[h.key] = vals[i];
+                // 학습 자료명 칸이 문서 이름 그대로면 저장하지 않는다 — 나중에 이름을 바꿔도 따라가게
+                if (i === ti && vals[i].trim() === (doc.title || '').trim()) return;
+                if (vals[i] !== h.text || i === ti) edits[h.key] = vals[i];
               });
               onSave(edits);
             }}

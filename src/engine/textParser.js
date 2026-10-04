@@ -43,7 +43,7 @@ export function normalizeMarkdown(text) {
 }
 
 const HEADING_RE = /^\s*(#{1,3})\s+(.+)$/;
-const ROMAN_HEAD = /^\s*(?:[ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]\s*[.．]|제\s*\d+\s*(?:장|단원|과|절)|\d+\s*(?:장|단원|과)\b|[■◆●▣]\s|【[^】]+】)/;
+const ROMAN_HEAD = /^\s*(?:[ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]\s*[.．]|제\s*\d+\s*(?:장|단원|과|절)|\d+\s*(?:장|단원)(?=\s|$|[.:)])|[■◆●▣]\s|【[^】]+】)/;
 const BOX_HEAD = /^\s*[<〈＜《\[]\s*(보\s*기|참\s*고|요\s*약|핵\s*심|정\s*리|tip)\s*[>〉＞》\]]\s*$/i;
 const TABLE_ROW = /^\s*\|.*\|\s*$/;
 const TABLE_SEP = /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/;

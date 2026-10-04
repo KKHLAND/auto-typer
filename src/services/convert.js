@@ -103,6 +103,7 @@ export async function convert({ files = [], text = '', settings, title, onProgre
       textChars += t.chars;
       texts.push(t.text);
     }
+    pdf.loadingTask?.destroy?.(); // 쪽 그림·글자는 다 뽑았으니 pdf.js 메모리 정리
     const scanned = textChars < total * 80; // 글자층이 거의 없으면 스캔본
     // 글자 있는 PDF 는 kordoc 이 이 컴퓨터 안에서 빠르게 (제목·목록·표·밑줄까지) — 'AI 정밀'을 고를 때만 Gemini
     const wantAi = engine === 'ai';
@@ -161,7 +162,10 @@ export async function convert({ files = [], text = '', settings, title, onProgre
 /** kordoc(https://github.com/KKHLAND/kordoc, MIT) 으로 문서 → 마크다운. 필요할 때만 불러온다(약 900KB). */
 let kordocMod = null;
 async function kordocMarkdown(buffer, name) {
-  kordocMod ??= import('../vendor/kordoc/kordoc.browser.js');
+  kordocMod ??= import('../vendor/kordoc/kordoc.browser.js').catch((e) => {
+    kordocMod = null; // 불러오기 실패는 다음에 다시 시도
+    throw e;
+  });
   const { parse } = await kordocMod;
   const r = await parse(buffer instanceof ArrayBuffer ? buffer : buffer.buffer, { images: false });
   if (!r?.success) {
