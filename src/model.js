@@ -68,6 +68,37 @@ export const fixSymbols = (s) =>
     )
     .join('');
 
+/**
+ * 모델이 JSON 안에 LaTeX 역슬래시를 한 번만 쓰면(\boldsymbol, \frac, \theta, \rightarrow, \neq) JSON 이
+ * 그것을 제어 문자(\b 백스페이스, \f, \t, \r, \n)로 읽어 버린다. 제어 문자 + 명령 이름 꼴을 역슬래시로 되돌린다.
+ */
+const CTRL_CMD = {
+  '\b': /^(?:egin|ar|eta|oldsymbol|ot|ox|ig|m|ullet|ecause|inom|mod)/,
+  '\f': /^(?:rac|orall|lat)/,
+  '\t': /^(?:heta|imes|ext|frac|riangle|ilde|herefore|anh|(?:o|au|an|op)(?![a-z]))/,
+  '\r': /^(?:ightarrow|ight|ho|m|angle|ceil|floor|Rightarrow|ightleftharpoons)/,
+  '\n': /^(?:eq|e|u|abla|ot|eg|i|leq|geq|parallel|mid|subseteq|subset|exists|ewline)(?![a-zA-Z])/,
+};
+export function fixLatexEscapes(v) {
+  if (Array.isArray(v)) return v.map(fixLatexEscapes);
+  if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, fixLatexEscapes(x)]));
+  if (typeof v !== 'string' || !/[\b\f\t\r\n]/.test(v)) return v;
+  let out = '';
+  for (let i = 0; i < v.length; i++) {
+    const c = v[i];
+    const re = CTRL_CMD[c];
+    if (re && re.test(v.slice(i + 1))) {
+      // 줄바꿈은 진짜 문단 나눔일 수 있어 수식($…) 안일 때만 되돌린다
+      if (c === '\n' && (out.slice(out.lastIndexOf('\n') + 1).split('$').length - 1) % 2 === 0) {
+        out += c;
+        continue;
+      }
+      out += '\\' + { '\b': 'b', '\f': 'f', '\t': 't', '\r': 'r', '\n': 'n' }[c];
+    } else out += c === '\b' || c === '\f' ? '' : c;
+  }
+  return out;
+}
+
 /** AI 가 guessed 로 알려 준 낱말을 글 속에서 찾아 ⟪ ⟫ 로 감싼다 (이미 감싼 곳·못 찾은 낱말은 건너뜀) */
 export function markGuesses(text, guessed) {
   let s = String(text ?? '');
@@ -92,8 +123,9 @@ const hasGuessMark = (s) => /⟪[^⟫]*⟫/.test(s);
 
 export function assemble(raw) {
   const out = [];
-  for (const r of raw) {
+  for (let r of raw) {
     let type = BLOCK_TYPES.includes(r.type) ? r.type : 'paragraph';
+    r = fixLatexEscapes(r); // 이미 저장된 AI 결과에 섞인 제어 문자도 되돌린다
     const text = markGuesses(fixSymbols(r.text), r.guessed).trim();
     if (r.title) r.title = fixSymbols(r.title);
     const prev = out[out.length - 1];
@@ -144,6 +176,58 @@ export function assemble(raw) {
   for (const b of out) {
     const all = [b.text, b.title, ...(b.rows || []).flat()].join('\n');
     if (/⟪[^⟫]*⟫/.test(all)) b.flag = 'check';
+  }
+  return joinShortChoices(out.filter((b) => !isExamBoilerplate(b)));
+}
+
+/**
+ * 시험지의 시험 정보 머리 표와 수험 안내문은 학습자료 내용이 아니므로 뺀다 (AI·kordoc·붙여넣기 모두).
+ *   · 안내문: "오늘 자신이 치를 과목의 문제지인지 확인", "답안지의 해당란에 … 확인", "다음 면에 계속"
+ *   · 정보 표: 과목코드·선택형·서술형·시험지 면수·고사명 같은 낱말이 둘 이상 든 표
+ */
+const NOTICE = /자신이\s*치를\s*과목|문제지인지\s*확인|답안지의?\s*해당\s*란|답안지에?\s*(?:정확히\s*)?(?:기입|표기)|다음\s*면에\s*계속|수험\s*번호를?\s*(?:정확히\s*)?(?:기입|표기)/;
+const EXAM_INFO = /과목\s*코드|선택형|서술형|서\.?논술형|시험지\s*면\s*수|(?:중간|기말)\s*고사|학년도|교시|홀수형|짝수형/g;
+export function isExamBoilerplate(b) {
+  const plainText = String(b.text ?? '').replace(/[_*]/g, '');
+  if (b.type !== 'table' && b.type !== 'figure' && NOTICE.test(plainText) && plainText.length <= 80) return true;
+  if (b.type === 'box' && NOTICE.test(`${b.title ?? ''} ${plainText}`) && plainText.length <= 80) return true;
+  if (b.type === 'table') {
+    const cells = (b.rows || []).flat().join(' ');
+    const hits = new Set((cells.match(EXAM_INFO) || []).map((m) => m.replace(/\s/g, '')));
+    if (hits.size >= 2 && (b.rows || []).length <= 3) return true;
+  }
+  return false;
+}
+
+/** 문항의 시작 줄인가 (1. … / 12) … / [서술형 1] / [서.논술형 2]) — 문항 사이를 한 줄 띄우는 데 쓴다 */
+export const isQuestionStart = (b) =>
+  b?.type === 'list' && (b.level || 1) === 1 && /^\s*(?:\d{1,2}\s*[.)]|[[<【]\s*[^\]>】]*(?:서술|논술|서답|단답)[^\]>】]*[\]>】]|(?:서술|논술|서답|단답)형\s*\d)/.test(b.text || '');
+
+/**
+ * 짧은 선택지(① −3, ② −2 …)가 한 줄에 하나씩 이어지면 원래 시험지처럼 한 줄에 탭으로 늘어놓는다.
+ * 선택지 하나라도 길면(수식 포함 글자 수 기준) 그대로 둔다.
+ */
+const CHOICE = /^\s*([①-⑤])/;
+export function joinShortChoices(blocks, maxLen = 12) {
+  const out = [];
+  for (let i = 0; i < blocks.length; i++) {
+    const b = blocks[i];
+    if (b.type !== 'list' || CHOICE.exec(b.text)?.[1] !== '①') {
+      out.push(b);
+      continue;
+    }
+    const run = [b];
+    while (run.length < 5) {
+      const n = blocks[i + run.length];
+      if (!n || n.type !== 'list' || n.level !== b.level || CHOICE.exec(n.text)?.[1] !== '①②③④⑤'[run.length]) break;
+      run.push(n);
+    }
+    const len = (t) => t.replace(/\$([^$]*)\$/g, (_, m) => m.replace(/\\[a-zA-Z]+|[{}^_\s]/g, '').slice(0, 12)).length;
+    if (run.length >= 3 && run.every((c) => !c.text.includes('\n') && len(c.text) <= maxLen)) {
+      // 탭 앞에 빈칸 둘: 글이 탭 위치에 딱 닿으면 탭 간격이 0 이 되어 선택지가 붙어 버린다
+      out.push({ ...b, text: run.map((c) => c.text.trim()).join('  \t'), flag: run.some((c) => c.flag === 'check') ? 'check' : b.flag });
+      i += run.length - 1;
+    } else out.push(b);
   }
   return out;
 }

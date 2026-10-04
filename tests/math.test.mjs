@@ -23,7 +23,10 @@ const cases = [
   [String.raw`AB \parallel CD`, 'AB ∥ CD'],
   [String.raw`\dfrac{1}{2}`, '{1} over {2}'],
   ['{a} over {b}', '{a} over {b}'], // 한글 수식 문법은 그대로
-  ['ax^2+bx+c=0', 'ax^{2}+bx+c=0'], // 중괄호 없는 첨자는 한 덩이만 (한글은 띄어 쓰기 전까지 모두 첨자로 묶는다)
+  ['ax^2+bx+c=0', 'ax^{2}+bx+c=0'],
+  [String.raw`\mathrm{A}(0, 0, 0)`, 'rm {A} it (0, 0, 0)'], // 점 이름·단위는 로만체
+  [String.raw`10\,\mathrm{m/s}`, '10 ` rm {m/s} it'],
+  [String.raw`\text{넓이} = \pi r^2`, '"넓이" = pi r ^{2}'], // 한글은 따옴표 글자 // 중괄호 없는 첨자는 한 덩이만 (한글은 띄어 쓰기 전까지 모두 첨자로 묶는다)
 ];
 for (const [src, want] of cases) expect(`${src} → ${toHwpEquation(src)}`, toHwpEquation(src) === want);
 

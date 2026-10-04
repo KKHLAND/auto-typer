@@ -1,3 +1,4 @@
+import { fixLatexEscapes } from '../model.js';
 // Gemini 호출 (선생님 본인 키, 브라우저에서 Google 로 직접 — 우리 서버는 없다)
 const BASE = 'https://generativelanguage.googleapis.com/v1beta';
 
@@ -95,6 +96,8 @@ const RULES = `너는 한국 학교 선생님의 학습자료(수업 자료·학
    문장 속 변수·식(x, 3a+2, f(x))도 수식이면 $ $ 로 감싸고, 숫자와 단위뿐인 글(3 cm, 25 %)은 그냥 글자로 둔다.
    수식이 아닌 글 속의 화살표·기호(→ ← ↔ ⇒ × · ○ △)는 $ $ 없이 그 문자 그대로 쓴다.
 4. 쪽 번호, "다음 면에 계속됩니다", 반복되는 머리말·꼬리말, 저작권 표기는 옮기지 않는다.
+   시험지의 시험 정보 머리 표(학년도·학기·고사명·날짜·과목코드·학년·과정·선택형/서술형 문항 수와 배점·시험지 면수)와
+   수험 안내문(※ 오늘 자신이 치를 과목의 문제지인지 확인하시오, ※ 답안지의 해당란에 … 확인하시오 등)도 옮기지 않는다 — 문항부터 옮긴다.
 5. 쪽의 첫 블록이 앞쪽에서 이어지는 문단·목록·상자의 계속이면 그 블록에 cont=true.
 6. 활동지·학습지처럼 인쇄된 틀에 적어 넣은 자료라면: 맨 위 자료 제목은 title, 인쇄된 문항·칸 제목(예: "❶ 영화 감상문")은 heading level 1,
    그 아래 인쇄된 안내문(※ …)은 paragraph, 적어 넣은 답은 문단마다 paragraph 로 옮긴다. 답을 쓰는 줄·칸의 테두리는 상자가 아니다
@@ -138,7 +141,7 @@ async function call(key, model, parts, signal, onRetry) {
       const j = await r.json();
       const text = (j.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('');
       if (!text) throw new Error(`빈 응답 (${j.candidates?.[0]?.finishReason || j.promptFeedback?.blockReason || '이유 미상'})`);
-      return JSON.parse(text).blocks || [];
+      return fixLatexEscapes(JSON.parse(text).blocks || []);
     }
     // 무료 사용량 초과·일시 과부하는 기다렸다 다시
     if ((r.status === 429 || r.status >= 500) && attempt < 5) {
@@ -169,6 +172,37 @@ export function recognizePage({ key, model, dataUrl, pageNo, totalPages, handwri
 /** 텍스트 → 블록 (붙여넣은 글이 지저분할 때) */
 export function structureText({ key, model, text, subject, signal, onRetry }) {
   return call(key, model || DEFAULT_MODEL, [{ text: prompt({ subject, isText: true }) + '\n\n---\n' + text }], signal, onRetry);
+}
+
+const BOX_SCHEMA = {
+  type: 'OBJECT',
+  properties: { box_2d: { type: 'ARRAY', items: { type: 'INTEGER' } } },
+  required: ['box_2d'],
+};
+
+const BOX_RULES = `이 이미지는 시험지·학습지 한 쪽에서 그림 하나 둘레를 넉넉히 잘라 낸 것이다.
+가운데 있는 그림(도형·그래프·실험 장치·사진·표 모양 그림)을 빠짐없이, 그러나 그 그림만 담는 가장 작은 상자를 구하라.
+- 넣을 것: 그림의 선·면·사진, 그림 안팎에 붙은 기호와 이름표(A, P, O, x, y, α, ㄱ, 금속판, 광원 같은 낱말), 축 이름·눈금·단위,
+  화살표, 범례, 그림 바로 아래의 (가)·(나)·<그림 1> 같은 그림 이름. 이름표 글자가 상자 밖으로 잘리면 안 된다.
+- 뺄 것: 그림 위·아래·옆의 문제 문장, 선택지(①~⑤), <보기> 상자, 배점, 다른 문항의 글자, 이미지 가장자리에서 잘린 글자 조각, 쪽 테두리 선.
+box_2d=[ymin, xmin, ymax, xmax] 를 이 이미지 기준 0~1000 으로 답하라.`;
+
+/** 그림 둘레를 넉넉히 자른 이미지 → 그림만 담는 상자 [ymin,xmin,ymax,xmax] (0~1000, 그 이미지 기준) */
+export async function refineFigureBox({ key, model, dataUrl, signal }) {
+  const [, mime, data] = /^data:([^;]+);base64,(.*)$/.exec(dataUrl);
+  const r = await fetch(`${BASE}/models/${model || DEFAULT_MODEL}:generateContent`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+    body: JSON.stringify({
+      contents: [{ role: 'user', parts: [{ text: BOX_RULES }, { inline_data: { mime_type: mime, data } }] }],
+      generationConfig: { temperature: 0, responseMimeType: 'application/json', responseSchema: BOX_SCHEMA },
+    }),
+    signal,
+  });
+  if (!r.ok) throw new Error(await errText(r));
+  const j = await r.json();
+  const box = JSON.parse((j.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('') || '{}').box_2d;
+  return Array.isArray(box) && box.length === 4 && box[2] > box[0] && box[3] > box[1] ? box : null;
 }
 
 /** 키 확인용 아주 작은 호출 */

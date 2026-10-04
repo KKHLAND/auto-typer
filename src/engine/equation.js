@@ -72,7 +72,8 @@ export function toHwpEquation(script) {
   // 첨자가 든 로만체(\mathrm{H_2O}, \text{m/s^2}) → rm {H _{2} O} it  (따옴표로 묶으면 첨자가 글자로 나온다)
   const keep = [];
   t = t.replace(/\\(?:mathrm|textrm|text|rm)\s*\{((?:[^{}]|\{[^{}]*\})*)\}/g, (all, body) => {
-    if (!/[_^]/.test(body)) return all;
+    // 한글·띄어 쓴 낱말은 따옴표 글자 그대로("넓이"), 영문·숫자·기호뿐이면 로만체(점 이름 A, 단위 m/s)
+    if (/[^A-Za-z0-9.,:;/+\-−()'_^{}\s]/.test(body) || /\S\s+\S/.test(body.trim())) return all;
     keep.push(`rm {${latexLikeToEqEdit(body)}} it`);
     return ` QQRM${String.fromCharCode(65 + keep.length - 1)} `;
   });

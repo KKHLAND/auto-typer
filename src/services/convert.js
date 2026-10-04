@@ -2,8 +2,8 @@
 import { assemble, importJson, newDoc } from '../model.js';
 import { parseText } from '../engine/textParser.js';
 import { hwpxToText, hwpxImages } from '../engine/hwpxReader.js';
-import { openPdf, renderPage, pageText, cropFigure, imageFileToPage, loadImage } from './pdf.js';
-import { recognizePage, structureText } from './gemini.js';
+import { openPdf, renderPage, pageText, cropFigure, cropContext, imageFileToPage, loadImage } from './pdf.js';
+import { recognizePage, structureText, refineFigureBox } from './gemini.js';
 
 export function fileKind(name) {
   const ext = name.toLowerCase().split('.').pop();
@@ -48,11 +48,41 @@ export async function convert({ files = [], text = '', settings, title, onProgre
       onRetry: (sec, code) =>
         onProgress({ stage: 'ai', page: i + 1, total, status: 'waiting', message: `사용량 한도(${code}) — ${sec}초 뒤 다시 시도` }),
     });
+    // 그림: 쪽 전체를 읽으며 잡은 상자는 대략적이라(옆 문장이 걸리거나 이름표가 잘림) 그림 둘레를 넉넉히 다시 잘라
+    // AI 에게 그림만 담는 상자를 한 번 더 묻는다. 자르기는 원본 픽셀 그대로라 그림 자체는 바뀌지 않는다.
+    const figs = bs.filter((b) => b.type === 'figure' && Array.isArray(b.box_2d) && b.box_2d.length === 4);
+    if (figs.length) onProgress({ stage: 'ai', page: i + 1, total, status: 'running', message: `${i + 1}/${total}쪽 그림 ${figs.length}개 다듬는 중` });
+    await Promise.all(
+      figs.map(async (b) => {
+        let box = b.box_2d;
+        let pad = 0.012;
+        try {
+          const ctx = await cropContext(pg.dataUrl, box);
+          const fine = await refineFigureBox({ key: settings.apiKey, model: settings.model, dataUrl: ctx.src, signal });
+          if (fine) {
+            box = ctx.map(fine);
+            pad = 0.02; // 다시 잡은 상자 둘레로 이름표가 들어갈 여유 (옆 글줄·조각은 cleanFigure 가 지운다)
+          }
+        } catch (e) {
+          if (e.name === 'AbortError') throw e;
+          console.warn('그림 상자 다듬기 실패 — 처음 상자로 자름', e);
+        }
+        // 자르는 범위는 처음 상자 ∪ 다시 잡은 상자 — 다시 잡은 상자가 빠뜨린 이름표(축 이름 y 등)는
+        // cropFigure 의 정리 단계가 '그림 선 곁의 외톨이 글자'로 알아보고 살린다
+        const outer = box === b.box_2d ? null : b.box_2d;
+        b.figure = await cropFigure(pg.dataUrl, box, pg.mmW, { pad, outer });
+        if (b.figure) Object.assign(b.figure, { box, outer }); // 나중에 다시 자를 때
+      }),
+    );
+    // 시험지처럼 그림이 문항 글 오른쪽에 있으면 AI 가 그림을 문항보다 먼저 내놓는다 → 그 문항 발문 바로 뒤로
+    for (let k = 0; k < bs.length - 1; k++) {
+      if (bs[k].type === 'figure' && bs[k + 1].type === 'list' && (bs[k + 1].level || 1) === 1) {
+        [bs[k], bs[k + 1]] = [bs[k + 1], bs[k]];
+        k++;
+      }
+    }
     for (const b of bs) {
       b.page = pages.indexOf(pg);
-      if (b.type === 'figure' && Array.isArray(b.box_2d) && b.box_2d.length === 4) {
-        b.figure = await cropFigure(pg.dataUrl, b.box_2d, pg.mmW);
-      }
       blocks.push(b);
     }
     onProgress({ stage: 'ai', page: i + 1, total, status: 'done', message: `${i + 1}/${total}쪽 완료 (${bs.length}개 블록)` });

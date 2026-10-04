@@ -2,6 +2,7 @@
 // hwpx 양식에서 읽은 쪽 크기·여백·단 수와 역할별 글꼴·크기·들여쓰기를 그대로 쓰고,
 // 블록을 '조판 단위'로 잘라 단→쪽 순으로 채운다. 넘치면 다음 쪽, 긴 문단은 문장 경계에서 나눈다.
 import { escapeHtml as esc, inlineHtml, paragraphs } from '../engine/markup.js';
+import { isQuestionStart } from '../model.js';
 
 const MM = 283.465; // HWPUNIT per mm
 
@@ -22,7 +23,10 @@ export function buildUnits(doc) {
       }
       case 'list': {
         const lv = Math.min(3, Math.max(1, b.level || 1));
-        paragraphs(b.text).forEach((l) => U.push({ cls: `u-list u-l${lv}`, html: inlineHtml(l), id }));
+        // 문항 사이 한 줄 띄우기 (hwpx 와 같게: 제목·소제목 바로 뒤 첫 문항은 빼고)
+        const prev = doc.blocks[doc.blocks.indexOf(b) - 1];
+        const gap = isQuestionStart(b) && prev && prev.type !== 'title' && prev.type !== 'heading';
+        paragraphs(b.text).forEach((l, k) => U.push({ cls: `u-list u-l${lv}${gap && !k ? ' u-q' : ''}`, html: inlineHtml(l), id }));
         break;
       }
       case 'box':
@@ -145,6 +149,15 @@ export async function layout(host, { doc, geometry, theme, headerTexts, css }) {
     pg.innerHTML = `${repeat || n === 1 ? headerHtml(theme, headerTexts, S) : ''}<div class="body"></div><div class="foot"></div>`;
     const body = pg.querySelector('.body');
     host.appendChild(pg);
+    // 머리 표 칸에 글이 넘치면 한 줄에 들도록 글자를 줄인다 (hwpx 의 fitHeaderCells 와 같게, 최소 8pt)
+    for (const cell of pg.querySelectorAll('.hd-sp > div')) {
+      cell.style.whiteSpace = 'nowrap';
+      let pt = parseFloat(getComputedStyle(cell).fontSize) * 0.75;
+      while (cell.scrollWidth > cell.clientWidth + 1 && pt > 8) {
+        pt -= 0.5;
+        cell.style.fontSize = `${pt}pt`;
+      }
+    }
     // 단 채우기(column-fill:auto)는 명시적 높이가 있어야 왼쪽 단→오른쪽 단으로 흐른다
     const cs = getComputedStyle(pg);
     let h = pg.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);

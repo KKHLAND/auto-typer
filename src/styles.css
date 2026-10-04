@@ -473,6 +473,8 @@ u { text-underline-offset: 0.18em; text-decoration-thickness: 0.08em; }
   font-family: var(--list-face); font-size: var(--list-size, 10.5pt); font-weight: var(--list-weight, 400);
   text-align: var(--list-align, justify); text-indent: var(--list-ti, -12pt); padding-left: var(--list-pad, 12pt);
   line-height: var(--list-line, 1.6); margin: var(--list-prev, 0) 0 var(--list-next, 0);
+  /* 한 줄로 늘어놓은 선택지(① … ⑤)는 탭으로 띄운다 — hwpx 의 탭과 비슷한 간격 */
+  white-space: pre-wrap; tab-size: 4;
 }
 .page .u-l2 { font-family: var(--list2-face, var(--list-face)); font-size: var(--list2-size, var(--list-size)); text-indent: var(--list2-ti, var(--list-ti)); padding-left: var(--list2-pad, calc(var(--list-pad) + 18pt)); line-height: var(--list2-line, var(--list-line)); }
 .page .u-l3 { font-family: var(--list3-face, var(--list-face)); font-size: var(--list3-size, var(--list-size)); text-indent: var(--list3-ti, var(--list-ti)); padding-left: var(--list3-pad, calc(var(--list-pad) + 36pt)); line-height: var(--list3-line, var(--list-line)); }
@@ -527,3 +529,6 @@ u { text-underline-offset: 0.18em; text-decoration-thickness: 0.08em; }
 mark.guess { background: #ffe58a; color: inherit; border-radius: 2px; box-shadow: 0 0 0 1px #f5c400 inset; padding: 0 1px; }
 @media print { mark.guess { background: none; box-shadow: none; padding: 0; } }
 .guess-note { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; background: #fff8db; border: 1px solid #f5d76e; color: #7a5a00; border-radius: 10px; padding: 8px 12px; font-size: 13px; margin: 0 0 12px; }
+
+/* 문항과 문항 사이 한 줄 (hwpx 의 빈 문단과 같은 높이) */
+.page .u-q { margin-top: calc(var(--body-size, 10pt) * var(--body-line, 1.6)); }

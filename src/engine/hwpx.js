@@ -10,7 +10,7 @@
 import { unzipSync, zipSync } from 'fflate';
 import { toHwpEquation, measureEquation } from './equation.js';
 import { parseInline, paragraphs, plain } from './markup.js';
-import { blockSummary } from '../model.js';
+import { blockSummary, isQuestionStart } from '../model.js';
 
 // 8×11 흰색 PNG (미리보기 썸네일 자리 채움)
 const BLANK_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAgAAAALCAAAAABn8JP5AAAAD0lEQVR4nGP4DwUMNGMAAPRPV6nJuRPhAAAAAElFTkSuQmCC';
@@ -18,8 +18,11 @@ const BLANK_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAgAAAALCAAAAABn8JP5AAAAD0lEQVR4nGP4D
 const dec = new TextDecoder('utf-8');
 const enc = new TextEncoder();
 
+// XML 에 쓸 수 없는 제어 문자(탭·줄바꿈 제외)는 지운다 — 하나만 섞여도 한글이 '파일이 손상되었습니다'로 거부한다
 export const esc = (s) =>
-  String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  String(s)
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]/g, '')
+    .replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
 const unesc = (s) =>
   s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
@@ -748,6 +751,8 @@ class Writer {
         }
         case 'list': {
           const lv = Math.min(3, Math.max(1, b.level || 1));
+          // 문항과 문항 사이는 한 줄 띄운다 (제목·소제목 바로 뒤의 첫 문항은 빼고)
+          if (isQuestionStart(b) && prev && prev.type !== 'title' && prev.type !== 'heading') xs.push(this.spacer());
           xs.push(this.textParas(b.text, R[`list${lv}`]));
           break;
         }
@@ -770,6 +775,38 @@ class Writer {
   }
 }
 
+/**
+ * 머리 표 칸의 글이 칸 너비보다 길면 그 칸의 글자 크기를 줄인다 (최소 8pt).
+ * 머리 표는 높이가 정해져 있어, 줄이 넘어가면 한글이 두 줄을 겹쳐 그린다(긴 학습 자료명).
+ */
+function fitHeaderCells(xml, hdr) {
+  const emOf = (ch) => {
+    if (/[가-힣ㄱ-ㅎㅏ-ㅣ一-鿿㉠-㉭①-⑳○●□■]/.test(ch)) return 1.0;
+    if (ch === ' ') return 0.3;
+    if (/[A-Z]/.test(ch)) return 0.68;
+    if (/[a-z0-9]/.test(ch)) return 0.55;
+    if (/[.,:;'"!|()[\]]/.test(ch)) return 0.35;
+    return 0.6;
+  };
+  return xml.replace(/<hp:tc\b[\s\S]*?<\/hp:tc>/g, (tc) => {
+    const width = +(/<hp:cellSz width="(\d+)"/.exec(tc)?.[1] ?? 0);
+    const m = /<hp:cellMargin left="(\d+)" right="(\d+)"/.exec(tc);
+    const avail = width - (m ? +m[1] + +m[2] : 282) - 150;
+    if (avail <= 0) return tc;
+    return tc.replace(/<hp:p\b[\s\S]*?<\/hp:p>/g, (p) => {
+      const runs = [...p.matchAll(/<hp:run charPrIDRef="(\d+)"[^>]*>([\s\S]*?)<\/hp:run>/g)];
+      const text = runs.map((r) => [...r[2].matchAll(/<hp:t>([\s\S]*?)<\/hp:t>/g)].map((t) => tText(t[1])).join('')).join('');
+      if (!text.trim()) return p;
+      const cp = runs.find((r) => /<hp:t>[^<]*\S/.test(r[2]))?.[1];
+      const h = +(/ height="(\d+)"/.exec(block(hdr.xml, 'charPr', cp) ?? '')?.[1] ?? 1000);
+      const em = [...text].reduce((a, c) => a + emOf(c), 0);
+      if (em * h <= avail) return p;
+      const size = Math.max(800, Math.floor(avail / em / 50) * 50);
+      return p.replace(/<hp:run charPrIDRef="(\d+)"/g, (all, id) => `<hp:run charPrIDRef="${hdr.charPr(id, { size })}"`);
+    });
+  });
+}
+
 /** 학습자료 문서 → hwpx 바이트 */
 export function buildHwpx(templatePkg, doc, opts = {}) {
   const pkg = clonePkg(templatePkg);
@@ -779,8 +816,8 @@ export function buildHwpx(templatePkg, doc, opts = {}) {
   const sec = readText(pkg, 'Contents/section0.xml');
   const { paras } = topLevelParas(sec);
   const [s0, e0] = paras[0];
-  const p0 = clearP0BodyText(sec.slice(s0, e0));
   const w = new Writer(pkg, analysis, opts);
+  const p0 = fitHeaderCells(clearP0BodyText(sec.slice(s0, e0)), w.hdr);
   const body = w.write(doc);
   writeText(pkg, 'Contents/section0.xml', sec.slice(0, s0) + p0 + body + '</hs:sec>');
   writeText(pkg, 'Contents/header.xml', w.hdr.xml);
