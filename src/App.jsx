@@ -107,14 +107,14 @@ export default function App() {
             </button>
           )}
           <button className="mh-btn" aria-label="설정" title="설정" onClick={() => setView({ name: 'settings' })}>
-            <Ic.Gear size={28} />
+            <Ic.Gear size={20} />
           </button>
         </div>
       </header>
 
       <nav className="rail" aria-label="주 메뉴">
         <button className="plus" title="새 변환" aria-label="새 변환" onClick={() => setView({ name: 'new' })}>
-          <Ic.Plus size={26} />
+          <Ic.Plus size={21} />
         </button>
         {nav.map((n) => (
           <button key={n.key} className={`rail-item ${active === n.key ? 'on' : ''}`} onClick={() => setView({ name: n.key })}>

@@ -1,24 +1,26 @@
 {
   "profile": {
     "body": {
-      "paraPr": "17",
+      "paraPr": "1",
       "style": "0",
-      "charPr": "34"
+      "charPr": "15"
     },
     "list": {
-      "paraPr": "38",
+      "paraPr": "33",
       "style": "0",
-      "charPr": "34"
+      "charPr": "15"
     },
     "h1": {
-      "paraPr": "3",
-      "style": "3",
-      "charPr": "0"
+      "derive": {
+        "scale": 1.5,
+        "bold": true
+      }
     },
     "h2": {
-      "paraPr": "44",
-      "style": "17",
-      "charPr": "65"
+      "derive": {
+        "scale": 1.25,
+        "bold": true
+      }
     },
     "h3": {
       "derive": {
@@ -27,65 +29,92 @@
       }
     },
     "spacer": {
-      "paraPr": "38",
-      "style": "8",
-      "charPr": "9"
+      "paraPr": "7",
+      "style": "0",
+      "charPr": "15"
+    },
+    "list2": {
+      "paraPr": "7",
+      "style": "0",
+      "charPr": "15"
     }
   },
   "css": {
     "body": {
-      "size": 11,
+      "size": 10,
       "bold": false,
       "face": "한컴바탕",
       "align": "JUSTIFY",
       "indent": 10,
-      "left": 10,
+      "left": 5,
       "line": 160,
       "prev": 0,
       "next": 0
     },
     "list": {
-      "size": 11,
+      "size": 10,
       "bold": false,
       "face": "한컴바탕",
       "align": "JUSTIFY",
-      "indent": -16,
-      "left": 10,
-      "line": 150,
-      "prev": 0,
-      "next": 0
-    },
-    "h1": {
-      "size": 12,
-      "bold": true,
-      "face": "휴먼고딕",
-      "align": "JUSTIFY",
       "indent": -10,
-      "left": 0,
-      "line": 145,
-      "prev": 0,
-      "next": 5.7
-    },
-    "h2": {
-      "size": 11,
-      "bold": true,
-      "face": "한컴바탕",
-      "align": "JUSTIFY",
-      "indent": 0,
-      "left": 10,
+      "left": 5,
       "line": 160,
       "prev": 0,
       "next": 0
     },
-    "h3": {
-      "size": 12.1,
+    "list2": {
+      "size": 10,
+      "bold": false,
+      "face": "한컴바탕",
+      "align": "JUSTIFY",
+      "indent": 0,
+      "left": 5,
+      "line": 160,
+      "prev": 0,
+      "next": 0
+    },
+    "list3": {
+      "size": 10,
+      "bold": false,
+      "face": "한컴바탕",
+      "align": "JUSTIFY",
+      "indent": 0,
+      "left": 23,
+      "line": 160,
+      "prev": 0,
+      "next": 0
+    },
+    "h1": {
+      "size": 15,
       "bold": true,
       "face": "한컴바탕",
       "align": "LEFT",
       "indent": 0,
       "left": 0,
       "line": 160,
-      "prev": 6.6,
+      "prev": 6,
+      "next": 0
+    },
+    "h2": {
+      "size": 12.5,
+      "bold": true,
+      "face": "한컴바탕",
+      "align": "LEFT",
+      "indent": 0,
+      "left": 0,
+      "line": 160,
+      "prev": 6,
+      "next": 0
+    },
+    "h3": {
+      "size": 11,
+      "bold": true,
+      "face": "한컴바탕",
+      "align": "LEFT",
+      "indent": 0,
+      "left": 0,
+      "line": 160,
+      "prev": 6,
       "next": 0
     }
   },
@@ -101,8 +130,8 @@
       "footer": 2835
     },
     "cols": 2,
-    "gap": 1700,
-    "colWidth": 24662
+    "gap": 1702,
+    "colWidth": 24661
   },
   "headerTexts": [
     {
@@ -133,13 +162,13 @@
       "key": "Contents/section0.xml#p0@4",
       "file": "Contents/section0.xml#p0",
       "index": 4,
-      "text": "학번 (             )  이름 (                 )"
+      "text": "학번 (       )  이름 (       )"
     }
   ],
   "stats": {
-    "paragraphs": 589,
-    "body": 114,
-    "list": 348,
-    "heading": 2
+    "paragraphs": 16,
+    "body": 3,
+    "list": 12,
+    "heading": 0
   }
 }

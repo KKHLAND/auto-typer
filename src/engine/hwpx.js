@@ -252,7 +252,7 @@ export function analyzeTemplate(pkg) {
 }
 
 /** 미리보기용 역할별 CSS 값 (pt·em) — hwpx 의 실제 서식을 화면에 근사 */
-function roleCss(header, profile) {
+export function roleCss(header, profile) {
   const base = (role) => {
     const r = profile[role];
     const src = r.derive ? profile.body : r;
@@ -273,7 +273,10 @@ function roleCss(header, profile) {
     if (r.derive?.list) Object.assign(out, { indent: -12, left: 12 });
     return out;
   };
-  return { body: base('body'), list: base('list'), h1: base('h1'), h2: base('h2'), h3: base('h3') };
+  const list = base('list');
+  const list2 = profile.list2 && !profile.list2.derive ? base('list2') : { ...list, left: +(list.left + 18).toFixed(1) };
+  const list3 = profile.list3 && !profile.list3.derive ? base('list3') : { ...list2, left: +(list2.left + 18).toFixed(1) };
+  return { body: base('body'), list, list2, list3, h1: base('h1'), h2: base('h2'), h3: base('h3') };
 }
 
 function mode(arr) {
@@ -574,8 +577,9 @@ class Writer {
     // 목록 2·3단계: 1단계보다 한 칸씩 더 들여쓴다
     const L = this.R.list1;
     const baseLeft = leftOf(L.paraPr);
-    this.R.list2 = { ...L, paraPr: this.hdr.paraPr(L.paraPr, { left: baseLeft + 1800 }) };
-    this.R.list3 = { ...L, paraPr: this.hdr.paraPr(L.paraPr, { left: baseLeft + 3600 }) };
+    // 양식에 2·3단계 목록 서식이 따로 있으면 그것을, 없으면 1단계보다 한 칸씩 더 들여쓴다
+    this.R.list2 = P.list2 && !P.list2.derive ? resolve(P.list2) : { ...L, paraPr: this.hdr.paraPr(L.paraPr, { left: baseLeft + 1800 }) };
+    this.R.list3 = P.list3 && !P.list3.derive ? resolve(P.list3) : { ...this.R.list2, paraPr: this.hdr.paraPr(this.R.list2.paraPr, { left: leftOf(this.R.list2.paraPr) + 1800 }) };
     // 자료 제목: 1단계 소제목을 키워 가운데로
     const h1H = heightOf(this.R.h1.charPr);
     this.R.title = {

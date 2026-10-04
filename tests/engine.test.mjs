@@ -10,7 +10,7 @@ for (const id of ['sample']) {
   const tpl = loadHwpx(readFileSync(`public/templates/${id}.hwpx`));
   const analysis = JSON.parse(readFileSync(`public/templates/${id}.profile.json`, 'utf8'));
   const ht = collectHeaderTexts(tpl);
-  const edits = { [ht[2].key]: '원묵고등학교', [ht[3].key]: '관계대명사 한눈에 정리 (수정됨)' };
+  const edits = { [ht[2].key]: '원묵고등학교', [ht[3].key]: '관계대명사 한눈에 정리' };
   const bytes = buildHwpx(tpl, sampleDoc(), { analysis, headerEdits: edits });
   writeFileSync(`tests/out/${id}-sample.hwpx`, bytes);
   const files = unzipSync(bytes);
@@ -22,7 +22,7 @@ for (const id of ['sample']) {
     if (errs.length) { console.error(id, n, errs.slice(0, 3)); fail++; }
   }
   const sec = new TextDecoder().decode(files['Contents/section0.xml']);
-  console.log(id, bytes.length, 'bytes, paras', (sec.match(/<hp:p /g) || []).length, 'edited header ok:', sec.includes('(수정됨)'));
+  console.log(id, bytes.length, 'bytes, paras', (sec.match(/<hp:p /g) || []).length, 'edited header ok:', sec.includes('관계대명사 한눈에 정리') && sec.includes('원묵고등학교'));
   // 생성물을 다시 분석해도 같은 역할로 읽히는지
   const re = analyzeTemplate(loadHwpx(bytes));
   console.log('  re-analysis stats', re.stats);
