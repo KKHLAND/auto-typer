@@ -133,7 +133,8 @@ export default function Settings({ settings, setSettings, notify, tab: initialTa
             <tbody>
               <tr><td><code>__밑줄__</code></td><td>밑줄 (지문 속 ① __단어__ 처럼)</td></tr>
               <tr><td><code>**굵게**</code></td><td>굵게 (‘않은’, ‘틀린’ 강조)</td></tr>
-              <tr><td><code>$x^{'{2}'}+1$</code></td><td>한글 수식 (분수 <code>{'{a} over {b}'}</code>, 루트 <code>sqrt {'{x}'}</code>)</td></tr>
+              <tr><td><code>{'$\\frac{a}{b}$'}</code></td><td>수식 — LaTeX(<code>{'\\sqrt{x}'}</code>, <code>{'\\sum_{k=1}^{n}'}</code>, 행렬) 나 한글 수식 문법(<code>{'{a} over {b}'}</code>) 모두 됩니다. 한글에는 한글 수식으로 들어갑니다.</td></tr>
+              <tr><td><code>{'$\\mathrm{H_2O}$'}</code></td><td>화학식·단위 (<code>{'\\ce{SO4^2-}'}</code>, <code>{'9.8\\,\\mathrm{m/s^2}'}</code>, 가역 반응 <code>{'\\rightleftharpoons'}</code>)</td></tr>
               <tr><td><code>[빈칸]</code></td><td>밑줄 빈칸</td></tr>
               <tr><td>줄바꿈</td><td>문단 나눔</td></tr>
             </tbody>

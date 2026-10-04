@@ -1,8 +1,8 @@
 // 변환 파이프라인: 올린 파일·붙여넣은 글 → 학습자료 문서
 import { assemble, importJson, newDoc } from '../model.js';
 import { parseText } from '../engine/textParser.js';
-import { hwpxToText } from '../engine/hwpxReader.js';
-import { openPdf, renderPage, pageText, cropFigure, imageFileToPage } from './pdf.js';
+import { hwpxToText, hwpxImages } from '../engine/hwpxReader.js';
+import { openPdf, renderPage, pageText, cropFigure, imageFileToPage, loadImage } from './pdf.js';
 import { recognizePage, structureText } from './gemini.js';
 
 export function fileKind(name) {
@@ -51,7 +51,7 @@ export async function convert({ files = [], text = '', settings, title, onProgre
     for (const b of bs) {
       b.page = pages.indexOf(pg);
       if (b.type === 'figure' && Array.isArray(b.box_2d) && b.box_2d.length === 4) {
-        b.figure = await cropFigure(pg.dataUrl, b.box_2d);
+        b.figure = await cropFigure(pg.dataUrl, b.box_2d, pg.mmW);
       }
       blocks.push(b);
     }
@@ -69,12 +69,17 @@ export async function convert({ files = [], text = '', settings, title, onProgre
     if (kind === 'office') {
       onProgress({ stage: 'render', status: 'running', message: `${file.name} 읽는 중 (kordoc)` });
       if (engineUsed !== 'ai') engineUsed = 'kordoc';
-      await textToBlocks(await kordocMarkdown(await file.arrayBuffer(), file.name));
+      const kd = await kordocParse(await file.arrayBuffer(), file.name);
+      await textToBlocks(kd.markdown, kd.images);
       continue;
     }
-    if (kind === 'text' || kind === 'hwpx') {
-      const t = kind === 'hwpx' ? hwpxToText(new Uint8Array(await file.arrayBuffer())) : await file.text();
-      await textToBlocks(t);
+    if (kind === 'hwpx') {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      await textToBlocks(hwpxToText(bytes), hwpxImages(bytes));
+      continue;
+    }
+    if (kind === 'text') {
+      await textToBlocks(await file.text());
       continue;
     }
     if (kind === 'image') {
@@ -117,15 +122,15 @@ export async function convert({ files = [], text = '', settings, title, onProgre
         await aiPage(local[i], i, local.length);
       }
     } else {
-      let md = null;
+      let kd = null;
       try {
         onProgress({ stage: 'render', status: 'running', message: `${file.name} 구조 읽는 중 (kordoc)` });
-        md = await kordocMarkdown(await file.arrayBuffer(), file.name);
+        kd = await kordocParse(await file.arrayBuffer(), file.name);
         if (engineUsed !== 'ai') engineUsed = 'kordoc';
       } catch (e) {
         console.warn('kordoc 실패 — 쪽 글자층으로 대신 읽음', e);
       }
-      if (md && md.trim()) blocks.push(...parseText(md));
+      if (kd?.markdown.trim()) blocks.push(...(await withFigures(parseText(kd.markdown), kd.images)));
       else {
         const base = pages.length - local.length;
         texts.forEach((t, i) => {
@@ -137,7 +142,7 @@ export async function convert({ files = [], text = '', settings, title, onProgre
 
   if (text.trim()) await textToBlocks(text);
 
-  async function textToBlocks(t) {
+  async function textToBlocks(t, images = []) {
     if (engine === 'ai' && hasKey) {
       engineUsed = 'ai';
       onProgress({ stage: 'ai', status: 'running', message: 'AI 가 글의 구조를 정리하는 중' });
@@ -148,7 +153,7 @@ export async function convert({ files = [], text = '', settings, title, onProgre
         onProgress({ stage: 'ai', page: i + 1, total: chunks.length, status: 'done', message: `${i + 1}/${chunks.length} 묶음 정리` });
       }
     } else {
-      blocks.push(...parseText(t));
+      blocks.push(...(await withFigures(parseText(t), images)));
     }
   }
 
@@ -159,20 +164,67 @@ export async function convert({ files = [], text = '', settings, title, onProgre
   return { doc, pages, engineUsed };
 }
 
-/** kordoc(https://github.com/KKHLAND/kordoc, MIT) 으로 문서 → 마크다운. 필요할 때만 불러온다(약 900KB). */
+/** kordoc(https://github.com/KKHLAND/kordoc, MIT) 으로 문서 → {마크다운, 그림}. 필요할 때만 불러온다(약 900KB). */
 let kordocMod = null;
-async function kordocMarkdown(buffer, name) {
+async function kordocParse(buffer, name) {
   kordocMod ??= import('../vendor/kordoc/kordoc.browser.js').catch((e) => {
     kordocMod = null; // 불러오기 실패는 다음에 다시 시도
     throw e;
   });
   const { parse } = await kordocMod;
-  const r = await parse(buffer instanceof ArrayBuffer ? buffer : buffer.buffer, { images: false });
+  const r = await parse(buffer instanceof ArrayBuffer ? buffer : buffer.buffer, { images: true });
   if (!r?.success) {
     const msg = r?.code === 'ENCRYPTED' || /암호|password/i.test(r?.error || '') ? '암호가 걸린 문서입니다. 한글에서 암호를 푼 뒤 올려 주세요.' : r?.error || '읽지 못했습니다';
     throw new Error(`${name}: ${msg}`);
   }
-  return r.markdown || '';
+  return { markdown: r.markdown || '', images: r.images || [] };
+}
+
+/**
+ * 그림 자리표(figureRef)에 kordoc 이 꺼낸 그림을 붙인다. 한글이 바로 쓰는 PNG·JPEG 로 맞추고
+ * (BMP·GIF 등은 브라우저로 그려 PNG 로), 그릴 수 없는 그림(WMF·EMF 등)과 짝 없는 자리표는 뺀다.
+ */
+async function withFigures(blocks, images = []) {
+  if (!blocks.some((b) => b.figureRef)) return blocks;
+  const byName = new Map(images.map((im) => [im.filename, im]));
+  const out = [];
+  for (const b of blocks) {
+    if (!b.figureRef) {
+      out.push(b);
+      continue;
+    }
+    const im = byName.get(b.figureRef) ?? byName.get(decodeURIComponent(b.figureRef));
+    const fig = im ? await imageToFigure(im).catch(() => null) : null;
+    if (fig) out.push({ type: 'figure', text: b.text || '', figure: fig });
+  }
+  return out;
+}
+
+async function imageToFigure({ data, mimeType }) {
+  const blob = new Blob([data], { type: mimeType || 'application/octet-stream' });
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = await loadImage(url);
+    if (!img.width || !img.height || (img.width < 8 && img.height < 8)) return null;
+    let src;
+    if (/^image\/(png|jpe?g)$/i.test(mimeType)) {
+      src = await new Promise((res) => {
+        const fr = new FileReader();
+        fr.onload = () => res(fr.result);
+        fr.readAsDataURL(blob);
+      });
+      src = src.replace(/^data:image\/jpg;/, 'data:image/jpeg;');
+    } else {
+      const c = document.createElement('canvas');
+      c.width = img.width;
+      c.height = img.height;
+      c.getContext('2d').drawImage(img, 0, 0);
+      src = c.toDataURL('image/png');
+    }
+    return { src, w: img.width, h: img.height };
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }
 
 function splitChunks(t, size) {

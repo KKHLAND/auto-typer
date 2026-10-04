@@ -3,6 +3,22 @@
 //  - 본문보다 큰 글씨의 짧은 문단은 소제목(#), 자동 번호는 글자로 풀어 줌
 //  - 표는 마크다운 표로, 1칸짜리 표(상자)는 인용(>)으로
 import { loadHwpx, readText, tText } from './hwpx.js';
+import { FIG_MARK } from './textParser.js';
+
+const IMG_RE = /⟦IMG:[^⟧]*⟧/g;
+
+/** 문서에 든 그림 파일: [{filename(=그림 id), data, mimeType}] — 그림 자리표와 짝지어 쓴다 */
+export function hwpxImages(bytes) {
+  const pkg = loadHwpx(bytes);
+  const hpf = readText(pkg, 'Contents/content.hpf') || '';
+  const out = [];
+  for (const m of hpf.matchAll(/<opf:item\b[^>]*>/g)) {
+    const id = /\bid="([^"]+)"/.exec(m[0])?.[1];
+    const href = /\bhref="(BinData\/[^"]+)"/.exec(m[0])?.[1];
+    if (id && href && pkg.files[href]) out.push({ filename: id, data: pkg.files[href], mimeType: /\bmedia-type="([^"]+)"/.exec(m[0])?.[1] || '' });
+  }
+  return out;
+}
 
 export function hwpxToText(bytes) {
   const pkg = loadHwpx(bytes);
@@ -54,6 +70,11 @@ export function hwpxToText(bytes) {
   const items = []; // {text, h} | {table: rows} | {box: lines}
   for (const name of sections) {
     let xml = readText(pkg, name).replace(/<hp:(header|footer)\b[\s\S]*?<\/hp:\1>/g, '');
+    // 그림은 자리표 글자로 바꿔 둔다 (본문 문단의 그림만 살리고, 표 칸 안의 그림은 아래에서 뺀다)
+    xml = xml.replace(/<hp:pic\b[\s\S]*?<\/hp:pic>/g, (pic) => {
+      const id = /binaryItemIDRef="([^"]+)"/.exec(pic)?.[1];
+      return id ? `<hp:t>⟦IMG:${id}⟧</hp:t>` : '';
+    });
     // 표를 먼저 떼어 내 자리표시로 바꾼다 (안쪽 표부터)
     const tables = [];
     let guard = 0;
@@ -62,7 +83,7 @@ export function hwpxToText(bytes) {
         const rows = [...body.matchAll(/<hp:tr>([\s\S]*?)<\/hp:tr>/g)].map((tr) =>
           [...tr[1].matchAll(/<hp:tc\b[\s\S]*?<\/hp:tc>/g)].map((tc) =>
             [...tc[0].matchAll(/<hp:p\b([^>]*)>([\s\S]*?)<\/hp:p>/g)]
-              .map((p) => paraText(p[1], p[2]).text)
+              .map((p) => paraText(p[1], p[2]).text.replace(IMG_RE, ''))
               .concat([...tc[0].matchAll(/⟦TBL(\d+)⟧/g)].map((x) => tables[+x[1]]?.flat().join(' ') ?? ''))
               .filter((s) => s.trim() && !/^⟦TBL\d+⟧$/.test(s.trim()))
               .join('\n'),
@@ -74,8 +95,13 @@ export function hwpxToText(bytes) {
     }
     for (const pm of xml.matchAll(/<hp:p\b([^>]*)>([\s\S]*?)(?=<hp:p\b|<\/hp:subList>|<\/hs:sec>)/g)) {
       const { text, h } = paraText(pm[1], pm[2]);
-      const parts = text.split(/(⟦TBL\d+⟧)/);
+      const parts = text.split(/(⟦TBL\d+⟧|⟦IMG:[^⟧]*⟧)/);
       for (const part of parts) {
+        const im = /^⟦IMG:([^⟧]*)⟧$/.exec(part);
+        if (im) {
+          items.push({ fig: im[1] });
+          continue;
+        }
         const tm = /^⟦TBL(\d+)⟧$/.exec(part);
         if (tm) {
           const rows = tables[+tm[1]];
@@ -95,7 +121,9 @@ export function hwpxToText(bytes) {
 
   const out = [];
   for (const it of items) {
-    if (it.table) {
+    if (it.fig) {
+      out.push(`${FIG_MARK}${it.fig}⟧`);
+    } else if (it.table) {
       out.push(it.table.map((r) => `| ${r.map((c) => c.replace(/\n/g, ' ').replace(/\|/g, '｜')).join(' | ')} |`).join('\n'));
     } else if (it.box) {
       out.push(it.box.map((l) => `> ${l}`).join('\n'));

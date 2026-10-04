@@ -70,7 +70,11 @@ const RULES = `너는 한국 학교 선생님의 학습자료(수업 자료·학
         level=들여쓰기 깊이(1~3). 시험 문항이면 문항 번호 줄이 list, 선택지 ①~⑤는 각각 level 2 의 list.
 - box: 테두리 상자·<보기>·참고·핵심 정리 상자. title=상자 제목(없으면 빈 문자열), text=내용(여러 줄은 \n).
 - table: 표. rows=행 배열(각 행은 칸 글자 배열, 첫 행은 머리 행), text=표 제목(없으면 빈 문자열). 합친 칸은 왼쪽/위 칸에 글자를 두고 나머지는 "".
-- figure: 그림·도표·그래프·사진·도식. box_2d=[ymin,xmin,ymax,xmax] (0~1000 정규화), text=그림 아래 설명(없으면 한 줄 요약).
+- figure: 그림·그래프·좌표평면·도형·도표·회로도·실험 장치·분자 구조·지도·사진. box_2d=[ymin,xmin,ymax,xmax] (0~1000 정규화)는
+        그림에 딸린 축 이름·눈금·점 이름(O, A, B)·기호(ㄱ, ㄴ, (가))·화살표·범례까지 모두 들어가도록 넉넉히 잡는다.
+        그림 안의 글자는 그림에 함께 담기므로 따로 블록으로 옮기지 않는다.
+        text=그림 바로 위·아래에 인쇄된 그림 제목(예: <그림 1>, [자료 1])이 있으면 그대로, 없으면 빈 문자열 — 설명을 지어 쓰지 않는다.
+        분수·행렬처럼 수식으로 쓸 수 있는 것은 그림이 아니라 수식, 칸으로 된 것은 table.
 
 [반드시 지킬 것]
 1. 내용을 고치거나 보태거나 요약하거나 번호를 새로 매기지 말 것. 또렷하게 쓰인 오탈자도 원문 그대로.
@@ -82,9 +86,14 @@ const RULES = `너는 한국 학교 선생님의 학습자료(수업 자료·학
    맥락으로도 도저히 추정할 수 없을 때만 [?] 를 쓴다.
 2. 서식 표기: 인쇄된 밑줄은 __밑줄__, 굵은 글씨는 **굵게**, 빈칸(괄호 빈칸·밑줄 빈칸·네모 빈칸)은 [빈칸].
    ㉠㉡ ⓐⓑ ①② (A)(B) [A] 같은 기호와 원문자는 보이는 그대로 옮긴다.
-3. 수식은 한글(hwp) 수식 문법으로 $ $ 사이에: 예) $x^{2}+2x+1$, \${a} over {b}$, $sqrt {x+1}$, $f(x)= LEFT ( 1 over 2 RIGHT )^{n}$,
-   $lim _{x -> 0}$, $sum _{k=1} ^{n} a_{k}$, $int _{0} ^{1} f(x)dx$, $alpha$, $theta$, $pi$, $le$, $ge$, $neq$, $times$.
-   수식이 아닌 글 속의 화살표·기호(→ ← ↔ ⇒ × · ○ △)는 $ $ 없이 그 문자 그대로 쓴다. LaTeX 표기(\\rightarrow 등)는 쓰지 않는다.
+3. 수식·화학식은 LaTeX 로 $ $ 사이에 쓴다 ($$ 는 쓰지 않는다). 앱이 한글 수식으로 바꾼다.
+   예) $x^{2}+2x+1$, $\\frac{a}{b}$, $\\sqrt{x+1}$, $\\sqrt[3]{2}$, $f(x)=\\left(\\frac{1}{2}\\right)^{n}$, $\\lim_{x \\to 0}\\frac{\\sin x}{x}$,
+   $\\sum_{k=1}^{n} a_{k}$, $\\int_{0}^{1} f(x)\\,dx$, $\\overline{AB}$, $\\angle ABC=90^{\\circ}$, $\\triangle ABC \\sim \\triangle DEF$, $\\vec{F}=m\\vec{a}$,
+   $\\begin{pmatrix} 1 & 2 \\\\ 3 & 4 \\end{pmatrix}$, $f(x)=\\begin{cases} x^{2} & (x \\ge 0) \\\\ -x & (x<0) \\end{cases}$, $\\{1, 2, 3\\}$, $P(A \\cap B)$.
+   화학식·반응식은 원소 기호를 \\mathrm 로: $\\mathrm{H_2O}$, $2\\mathrm{H_2}+\\mathrm{O_2} \\rightarrow 2\\mathrm{H_2O}$, $\\mathrm{SO_4^{2-}}$, 가역 반응 \\rightleftharpoons.
+   단위가 붙은 물리량은 $9.8\\,\\mathrm{m/s^2}$ 처럼. 손으로 쓴 수식·풀이도 같은 방법으로 옮긴다.
+   문장 속 변수·식(x, 3a+2, f(x))도 수식이면 $ $ 로 감싸고, 숫자와 단위뿐인 글(3 cm, 25 %)은 그냥 글자로 둔다.
+   수식이 아닌 글 속의 화살표·기호(→ ← ↔ ⇒ × · ○ △)는 $ $ 없이 그 문자 그대로 쓴다.
 4. 쪽 번호, "다음 면에 계속됩니다", 반복되는 머리말·꼬리말, 저작권 표기는 옮기지 않는다.
 5. 쪽의 첫 블록이 앞쪽에서 이어지는 문단·목록·상자의 계속이면 그 블록에 cont=true.
 6. 활동지·학습지처럼 인쇄된 틀에 적어 넣은 자료라면: 맨 위 자료 제목은 title, 인쇄된 문항·칸 제목(예: "❶ 영화 감상문")은 heading level 1,
@@ -100,7 +109,7 @@ const HANDWRITING = {
    지운 흔적·줄 그어 지운 글자·연습 계산은 옮기지 않는다. 흐린 글자는 1번 규칙대로 맥락으로 추정해 채우고 uncertain=true.`,
 };
 
-function prompt({ handwriting = 'include', subject = '', pageNo, totalPages, isText }) {
+export function prompt({ handwriting = 'include', subject = '', pageNo, totalPages, isText }) {
   return [
     RULES,
     HANDWRITING[handwriting] ?? HANDWRITING.include,

@@ -57,6 +57,13 @@ await build({
   }],
 });
 
+// 수식 변환만 따로 작게 묶는다 (hwpx 작성기·미리보기가 바로 쓰므로 큰 번들을 기다리지 않게)
+//   latexLikeToEqEdit: LaTeX → 한글 수식 스크립트 / hmlToLatex: 한글 수식 스크립트 → LaTeX
+const eqOut = resolve(root, 'src/vendor/kordoc/equation.js');
+const eqSrc = (f) => JSON.stringify(resolve(src, f).replace(/\\/g, '/'));
+writeFileSync(resolve(here, '.entry-eq.ts'), `export { latexLikeToEqEdit } from ${eqSrc('src/hwpx/equation-generate.ts')};\nexport { hmlToLatex } from ${eqSrc('src/hwpx/equation.ts')};\n`);
+await build({ entryPoints: [resolve(here, '.entry-eq.ts')], bundle: true, platform: 'neutral', format: 'esm', minify: true, outfile: eqOut, logLevel: 'warning' });
+
 // pdf.js 5 이후에는 PDFDocumentProxy.destroy() 가 없다 — 정리 단계에서 터지지 않게
 let js = readFileSync(out, 'utf8');
 const before = js.length;
@@ -65,3 +72,6 @@ let sha = '';
 try { sha = execSync('git rev-parse --short HEAD', { cwd: src }).toString().trim(); } catch { /* 깃 아님 */ }
 writeFileSync(out, `/* kordoc (MIT) browser build — https://github.com/KKHLAND/kordoc ${sha} — see LICENSE, NOTICE, THIRD_PARTY */\n${js}`);
 console.log('kordoc browser bundle', out, `${(js.length / 1024).toFixed(0)} KB`, before === js.length ? '(destroy 패치 없음?)' : '(destroy 패치 적용)');
+const eqJs = readFileSync(eqOut, 'utf8');
+writeFileSync(eqOut, `/* kordoc (MIT) equation converter — https://github.com/KKHLAND/kordoc ${sha} — includes a port of hml-equation-parser (Apache-2.0), see THIRD_PARTY */\n${eqJs}`);
+console.log('kordoc equation bundle', eqOut, `${(eqJs.length / 1024).toFixed(0)} KB`);

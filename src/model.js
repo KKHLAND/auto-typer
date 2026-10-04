@@ -57,8 +57,16 @@ const LATEX_SYMBOL = {
   rightarrow: '→', to: '→', leftarrow: '←', leftrightarrow: '↔', Rightarrow: '⇒', Leftarrow: '⇐', Leftrightarrow: '⇔',
   times: '×', cdot: '·', div: '÷', pm: '±', le: '≤', leq: '≤', ge: '≥', geq: '≥', ne: '≠', neq: '≠', circ: '○', triangle: '△',
 };
+// 기호 하나뿐인 수식($\times$)은 글자로, 수식 밖에 새어 나온 \rightarrow 도 글자로. 수식 안은 그대로 둔다.
 export const fixSymbols = (s) =>
-  String(s ?? '').replace(/\$\s*\\([A-Za-z]+)\s*\$|\\(rightarrow|leftarrow|Rightarrow|leftrightarrow)\b/g, (all, a, b) => LATEX_SYMBOL[a || b] ?? all);
+  String(s ?? '')
+    .split(/(\$(?=\S)[^$\n]*?\S\$(?!\d)|\$\S\$(?!\d))/)
+    .map((part, k) =>
+      k % 2
+        ? part.replace(/^\$\s*\\([A-Za-z]+)\s*\$$/, (all, a) => LATEX_SYMBOL[a] ?? all)
+        : part.replace(/\\(rightarrow|leftarrow|Rightarrow|leftrightarrow)\b/g, (all, b) => LATEX_SYMBOL[b] ?? all),
+    )
+    .join('');
 
 /** AI 가 guessed 로 알려 준 낱말을 글 속에서 찾아 ⟪ ⟫ 로 감싼다 (이미 감싼 곳·못 찾은 낱말은 건너뜀) */
 export function markGuesses(text, guessed) {
@@ -79,6 +87,8 @@ export function markGuesses(text, guessed) {
   }
   return s;
 }
+
+const hasGuessMark = (s) => /⟪[^⟫]*⟫/.test(s);
 
 export function assemble(raw) {
   const out = [];
@@ -111,6 +121,14 @@ export function assemble(raw) {
       continue;
     }
     if (!text && type !== 'figure') continue;
+    // 소제목 끝에 붙은 ※ 안내문("❶ 감상문 ※ 한글로 작성하세요.")은 다음 문단으로 — 쪽마다 같은 모양이 되게
+    const note = type === 'heading' && /^(.+?)\s+(※\s*\S.*)$/.exec(text);
+    if (note && !text.includes('\n')) {
+      const flag = r.uncertain || hasGuessMark(text) ? 'check' : 'todo';
+      out.push(newBlock('heading', { text: note[1], level: r.level, page: r.page, flag }));
+      out.push(newBlock('paragraph', { text: note[2], page: r.page, flag }));
+      continue;
+    }
     out.push(
       newBlock(type, {
         text,

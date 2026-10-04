@@ -30,7 +30,8 @@ export async function renderPage(pdf, n, maxPx = 2000) {
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   await page.render({ canvasContext: ctx, viewport: vp, canvas }).promise;
-  return { dataUrl: canvas.toDataURL('image/jpeg', 0.88), width: canvas.width, height: canvas.height };
+  // mmW: 쪽의 실제 너비(mm) — 잘라 낸 그림을 원본 크기 그대로 넣는 데 쓴다 (1pt = 25.4/72 mm)
+  return { dataUrl: canvas.toDataURL('image/jpeg', 0.88), width: canvas.width, height: canvas.height, mmW: (vp1.width * 25.4) / 72 };
 }
 
 /**
@@ -93,11 +94,14 @@ export async function pageText(pdf, n) {
   return { text: lines.join('\n'), chars };
 }
 
-/** 이미지 dataURL 에서 상자 영역(0~1000 정규화 [ymin,xmin,ymax,xmax])만 잘라 PNG 로 */
-export async function cropFigure(dataUrl, box) {
+/**
+ * 이미지 dataURL 에서 상자 영역(0~1000 정규화 [ymin,xmin,ymax,xmax])만 잘라 PNG 로.
+ * 그림 둘레의 축 이름·기호(ㄱ, A, x)가 잘리지 않게 조금 넉넉히 자른다. pageMmW 가 있으면 원본 크기(mm)도 함께.
+ */
+export async function cropFigure(dataUrl, box, pageMmW) {
   const img = await loadImage(dataUrl);
   const [y0, x0, y1, x1] = box.map((v) => Math.max(0, Math.min(1000, v)) / 1000);
-  const pad = 0.004;
+  const pad = 0.012;
   const sx = Math.max(0, (x0 - pad) * img.width);
   const sy = Math.max(0, (y0 - pad) * img.height);
   const sw = Math.min(img.width - sx, (x1 - x0 + pad * 2) * img.width);
@@ -107,7 +111,7 @@ export async function cropFigure(dataUrl, box) {
   c.width = Math.round(sw);
   c.height = Math.round(sh);
   c.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, c.width, c.height);
-  return { src: c.toDataURL('image/png'), w: c.width, h: c.height };
+  return { src: c.toDataURL('image/png'), w: c.width, h: c.height, ...(pageMmW ? { mmW: +((sw / img.width) * pageMmW).toFixed(1) } : {}) };
 }
 
 export function loadImage(src) {

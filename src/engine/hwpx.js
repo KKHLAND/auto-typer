@@ -8,6 +8,7 @@
 // 밑줄·굵게·가운데 정렬·상자 테두리처럼 양식에 없을 수 있는 서식은 header.xml 에 복제해 추가한다.
 
 import { unzipSync, zipSync } from 'fflate';
+import { toHwpEquation, measureEquation } from './equation.js';
 import { parseInline, paragraphs, plain } from './markup.js';
 import { blockSummary } from '../model.js';
 
@@ -524,54 +525,19 @@ export class HeaderEditor {
 let objId = 1000000000 + Math.floor(Math.random() * 100000000);
 const nextObjId = () => String(objId++);
 
-/** 수식 너비(em) 대략치: 한글은 열 때 수식 크기를 다시 재지 않으므로 최대한 근사한다 */
-export function eqWidthEm(script) {
-  let s = script.replace(/\b(left|right|rm|it|bold)\b/g, '');
-  let em = 0;
-  // 첨자 {..} 또는 한 글자
-  s = s.replace(/[\^_]\s*(\{[^}]*\}|\S)/g, (_, g) => {
-    em += g.replace(/[{}\s]/g, '').length * 0.36;
-    return '';
-  });
-  s = s.replace(/\b(sqrt|over|times|cdot|le|ge|ne|pi|theta|alpha|beta|sum|int|lim|from|to)\b/g, (k) => {
-    em += k === 'over' ? 0 : k === 'sum' || k === 'int' ? 1.2 : 0.8;
-    return '';
-  });
-  for (const ch of s.replace(/[{}\s`~]/g, '')) {
-    if ('+-=<>±×÷'.includes(ch)) em += 1.0;
-    else if ('()[],.|'.includes(ch)) em += 0.38;
-    else em += 0.56;
-  }
-  return Math.max(0.6, em * 1.1);
-}
-
-/**
- * 수식 스크립트를 한글 수식 문법으로 정리한다. 한글 수식기는 이상한 스크립트(예: 끝에 \ 하나)에서
- * 멈출 수 있으므로, AI·변환기가 섞어 낸 LaTeX 를 바꾸고 남은 역슬래시는 지운다.
- */
-export function toHwpEquation(script) {
-  let s = String(script);
-  for (let k = 0; k < 3; k++) s = s.replace(/\\[dt]?frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g, '{$1} over {$2}');
-  return s
-    .replace(/\\left\b/g, 'LEFT ').replace(/\\right\b/g, 'RIGHT ')
-    .replace(/\\(?:neq|ne)\b/g, '!=').replace(/\\(?:leq|le)\b/g, '<=').replace(/\\(?:geq|ge)\b/g, '>=')
-    .replace(/\\(?:rightarrow|to)\b/g, '->').replace(/\\leftarrow\b/g, '<-')
-    .replace(/\\([A-Za-z]+)/g, '$1 ') // \sqrt → sqrt, \alpha → alpha, \times → times …
-    .replace(/\\/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
+/** 수식 → <hp:equation>. 한글은 열 때 수식 상자 크기를 다시 재지 않으므로 구조를 따라 크기를 어림한다 */
 function eqXml(script, charHeight) {
-  // 수식: 한글이 열 때 스크립트로 다시 조판한다. 크기는 대략치.
-  script = toHwpEquation(script);
-  const w = Math.max(500, Math.round(eqWidthEm(script) * charHeight));
+  const hwp = toHwpEquation(script);
+  const m = measureEquation(hwp);
+  const w = Math.max(500, Math.round(m.w * charHeight));
+  const ht = Math.round((m.up + m.dn) * charHeight);
+  const base = Math.round((m.up / (m.up + m.dn)) * 100);
   return (
-    `<hp:equation id="${nextObjId()}" zOrder="0" numberingType="EQUATION" textWrap="TOP_AND_BOTTOM" textFlow="BOTH_SIDES" lock="0" dropcapstyle="None" version="Equation Version 60" baseLine="86" textColor="#000000" baseUnit="${charHeight}" lineMode="CHAR" font="HancomEQN">` +
-    `<hp:sz width="${w}" widthRelTo="ABSOLUTE" height="${Math.round(charHeight * 1.2)}" heightRelTo="ABSOLUTE" protect="0"/>` +
+    `<hp:equation id="${nextObjId()}" zOrder="0" numberingType="EQUATION" textWrap="TOP_AND_BOTTOM" textFlow="BOTH_SIDES" lock="0" dropcapstyle="None" version="Equation Version 60" baseLine="${base}" textColor="#000000" baseUnit="${charHeight}" lineMode="CHAR" font="HancomEQN">` +
+    `<hp:sz width="${w}" widthRelTo="ABSOLUTE" height="${ht}" heightRelTo="ABSOLUTE" protect="0"/>` +
     `<hp:pos treatAsChar="1" affectLSpacing="0" flowWithText="1" allowOverlap="0" holdAnchorAndSO="0" vertRelTo="PARA" horzRelTo="PARA" vertAlign="TOP" horzAlign="LEFT" vertOffset="0" horzOffset="0"/>` +
     `<hp:outMargin left="56" right="56" top="0" bottom="0"/><hp:shapeComment>수식입니다.</hp:shapeComment>` +
-    `<hp:script>${esc(script)}</hp:script></hp:equation>`
+    `<hp:script>${esc(hwp)}</hp:script></hp:equation>`
   );
 }
 
@@ -741,7 +707,9 @@ class Writer {
     const pxW = fig.w || 400;
     const pxH = fig.h || 300;
     const maxW = Math.round(this.a.geometry.colWidth * (fig.scale ?? 0.9));
-    const w = Math.min(maxW, pxW * 75);
+    // 원본 크기를 알면(스캔본에서 잘라 낸 그림) 그 크기로, 모르면 화면 픽셀 크기로 — 단 너비를 넘지 않게
+    const natural = fig.mmW ? Math.round(fig.mmW * 283.465) : pxW * 75;
+    const w = Math.min(maxW, natural);
     const h = Math.round((w * pxH) / pxW);
     const pic =
       `<hp:pic id="${nextObjId()}" zOrder="0" numberingType="PICTURE" textWrap="TOP_AND_BOTTOM" textFlow="BOTH_SIDES" lock="0" dropcapstyle="None" href="" groupLevel="0" instid="${nextObjId()}" reverse="0">` +
@@ -874,3 +842,5 @@ export function stripToTemplate(pkg) {
   const bytes = buildHwpx(pkg, { title: '', blocks: [] }, { analysis });
   return { bytes, analysis };
 }
+
+export { toHwpEquation };

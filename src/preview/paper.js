@@ -47,7 +47,11 @@ export function buildUnits(doc) {
         break;
       }
       case 'figure':
-        if (b.figure?.src) U.push({ cls: 'u-fig', html: `<img src="${b.figure.src}" alt="">` + (b.text ? `<div class="cap">${inlineHtml(b.text)}</div>` : ''), id });
+        if (b.figure?.src) {
+          // hwpx 와 같은 크기: 원본 mm 가 있으면 그대로, 없으면 픽셀 크기(1px = 0.2646mm), 단 너비의 90% 까지
+          const mm = b.figure.mmW || (b.figure.w || 400) * 0.2646;
+          U.push({ cls: 'u-fig', html: `<img src="${b.figure.src}" alt="" style="width:${mm.toFixed(1)}mm">` + (b.text ? `<div class="cap">${inlineHtml(b.text)}</div>` : ''), id });
+        }
         break;
       default:
         paragraphs(b.text).forEach((l) => l.trim() && U.push({ cls: 'u-para', html: inlineHtml(l), id, split: true }));

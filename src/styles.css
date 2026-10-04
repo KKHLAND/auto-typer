@@ -390,7 +390,9 @@ body { font-size: 15px; background: var(--page); }
 .u-box { border: 0.12mm solid #000; padding: 2.2mm 3mm; margin: 1.5mm 0 2mm; line-height: 1.6; text-align: justify; }
 .u-box .bt { text-align: center; margin-bottom: 1mm; letter-spacing: 0.25em; }
 .u-fig { text-align: center; margin: 1.5mm 0; }
-.u-fig img { max-width: 92%; }
+.u-fig img { max-width: 90%; height: auto; }
+.eq-k .katex { font-size: 1.08em; }
+.eq-k .katex-html { white-space: nowrap; }
 .u-choices { padding-left: 0.6em; margin-top: 1.2mm; line-height: 1.6; }
 .u-choices .ch { display: flex; gap: 0.35em; }
 .u-choices .cm { flex: none; }

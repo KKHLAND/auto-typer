@@ -8,3 +8,4 @@ public/pdfjs/
 .claude/
 *.log
 tools/kordoc/.entry.ts
+tools/kordoc/.entry-eq.ts

@@ -1,10 +1,12 @@
 // 문항 텍스트 안의 인라인 서식 표기.
 // 편집기·AI·파서·hwpx 작성기·미리보기가 모두 이 한 가지 표기를 공유한다.
 //
-//   __밑줄__     **굵게**     $수식$ (한글 수식 스크립트)     [빈칸]
+//   __밑줄__     **굵게**     $수식$ (LaTeX 또는 한글 수식 문법 — equation.js)     [빈칸]
 //   ⟪추정⟫  흐린 손글씨를 AI 가 맥락으로 짐작해 채운 낱말 — 편집·미리보기에서만 노란 표시, hwpx·PDF 에는 글자만
 //
 // 줄바꿈(\n)은 문단 구분이다.
+import katex from 'katex';
+import { toLatex } from './equation.js';
 
 // 수식 $…$: 여는 $ 바로 뒤와 닫는 $ 바로 앞에 공백이 없고, 닫는 $ 뒤에 숫자가 오지 않을 때만
 // (pandoc 규칙) — "$40 ② $50" 같은 달러 금액이 수식으로 잘못 묶이지 않게
@@ -74,12 +76,21 @@ export function eqHtml(script) {
   return s.replace(/[{}`~]/g, '').replace(/\s+/g, ' ');
 }
 
+/** 수식 미리보기: KaTeX 로 그리고(한글처럼 분수·극한을 글자 크기 그대로), 못 그리는 식은 간이 표기로 */
+function eqPreview(script) {
+  try {
+    return `<span class="eq-k">${katex.renderToString(`\\displaystyle ${toLatex(script)}`, { throwOnError: true, strict: 'ignore', output: 'html' })}</span>`;
+  } catch {
+    return `<span class="eq">${eqHtml(script)}</span>`;
+  }
+}
+
 /** 미리보기용 HTML (한 문단) */
 export function inlineHtml(line) {
   return parseInline(line)
     .map((r) => {
       if (r.blank) return '<span class="blank">&#8195;&#8195;&#8195;&#8195;&#8195;</span>';
-      let h = r.eq ? `<span class="eq">${eqHtml(r.text)}</span>` : escapeHtml(r.text);
+      let h = r.eq ? eqPreview(r.text) : escapeHtml(r.text);
       if (r.b) h = `<b>${h}</b>`;
       if (r.u) h = `<u>${h}</u>`;
       if (r.guess) h = `<mark class="guess" title="AI가 맥락으로 추정한 글자 — 확인해 주세요">${h}</mark>`;

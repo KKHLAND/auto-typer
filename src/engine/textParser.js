@@ -22,25 +22,46 @@ function htmlTables(text) {
 }
 
 /** 마크다운·HTML 흔적을 내부 표기로 (kordoc 같은 문서→마크다운 변환기 출력도 그대로 받는다) */
+// 원문 그대로의 $ (마크다운 \$) 를 잠시 맡아 두는 글자
+const LIT_DOLLAR = '\u0002';
+// 수식 칸: $$…$$ (따로 선 수식) 또는 $…$ (markup.js 와 같은 pandoc 규칙)
+const MATH_SPAN = /(\$\$[^$]+?\$\$|\$(?=\S)[^$\n]*?\S\$(?!\d)|\$[^\s$]\$(?!\d))/;
+
+/** 수식 밖의 글만 마크다운·HTML 흔적을 정리한다 — 수식 속 \{ \\ \_ 같은 LaTeX 는 손대지 않는다 */
+function tidyText(l) {
+  return l
+    .replace(/\\\|/g, '｜') // 칸 나눔이 아닌 세로줄
+    .replace(/\\([\\`*_{}[\]()#+\-.!~<>])/g, '$1') // 마크다운 이스케이프 풀기
+    .replace(/<u>([\s\S]*?)<\/u>/gi, '__$1__')
+    .replace(/<b>([\s\S]*?)<\/b>|<strong>([\s\S]*?)<\/strong>/gi, (_, a, b) => `**${a ?? b}**`);
+}
+
+/** 마크다운·HTML 흔적을 내부 표기로 (kordoc 같은 문서→마크다운 변환기 출력도 그대로 받는다) */
 export function normalizeMarkdown(text) {
   let s = String(text).replace(/\r\n?/g, '\n');
   s = htmlTables(s);
   return s
     .split('\n')
     .map((line) => {
-      if (/^\s*!\[[^\]]*\]\([^)]*\)\s*$/.test(line)) return ''; // 그림 자리표시
+      const inTable = /^\s*\|/.test(line);
+      // 그림 ![](이름) → 그림 자리표 (변환기가 넘긴 그림과 짝지음). 표 칸 안의 그림은 뺀다.
+      line = line.replace(/!\[[^\]]*\]\(([^)\s]*)[^)]*\)/g, (_, src) => (inTable || !src ? '' : `\n${FIG_MARK}${src}⟧\n`));
+      line = line.replace(/\\\$/g, LIT_DOLLAR);
       let l = line
-        .replace(/\\\|/g, '｜') // 칸 나눔이 아닌 세로줄
-        .replace(/\\([\\`*_{}[\]()#+\-.!~<>$])/g, '$1') // 마크다운 이스케이프 풀기 (\$40 → $40, 수식 판정은 markup.js 규칙이 맡는다)
-        .replace(/<u>([\s\S]*?)<\/u>/gi, '__$1__')
-        .replace(/<b>([\s\S]*?)<\/b>|<strong>([\s\S]*?)<\/strong>/gi, (_, a, b) => `**${a ?? b}**`);
+        .split(MATH_SPAN)
+        .map((part, k) => (k % 2 ? part.replace(/^\$\$\s*([\s\S]*?)\s*\$\$$/, '$$$1$') : tidyText(part)))
+        .join('')
+        .replaceAll(LIT_DOLLAR, '$');
       // 표 줄 안의 <br> 은 칸 안 줄바꿈, 그 밖은 문단 나눔
-      l = l.replace(/<br\s*\/?>/gi, /^\s*\|/.test(l) ? CELL_BR : '\n');
+      l = l.replace(/<br\s*\/?>/gi, inTable ? CELL_BR : '\n');
       // 남은 서식용 HTML 태그는 글자만 남긴다 (<보기> 같은 꺾쇠 글은 건드리지 않음)
       return l.replace(/<\/?(?:sup|sub|span|div|p|i|em|small|mark|font|a|thead|tbody|colgroup|col)\b[^>]*>/gi, '');
     })
     .join('\n');
 }
+
+// 그림 자리표: ⟦그림:image_001.png⟧ — parseText 가 figure 블록으로 바꾼다
+export const FIG_MARK = '⟦그림:';
 
 const HEADING_RE = /^\s*(#{1,3})\s+(.+)$/;
 const ROMAN_HEAD = /^\s*(?:[ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]\s*[.．]|제\s*\d+\s*(?:장|단원|과|절)|\d+\s*(?:장|단원)(?=\s|$|[.:)])|[■◆●▣]\s|【[^】]+】)/;
@@ -97,6 +118,13 @@ export function parseText(raw) {
     if (!t) {
       flushPara();
       flushBox(); // 빈 줄이 상자를 닫는다
+      continue;
+    }
+
+    // 그림 자리표 → 그림 블록 (실제 그림은 변환 단계에서 이름으로 찾아 붙인다)
+    if (t.startsWith(FIG_MARK) && t.endsWith('⟧')) {
+      flushAll();
+      blocks.push({ type: 'figure', text: '', figureRef: t.slice(FIG_MARK.length, -1) });
       continue;
     }
 

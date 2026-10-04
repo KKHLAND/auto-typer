@@ -144,7 +144,7 @@ export default function NewJob({ settings, onCancel, onDone, onSettings, notify 
                   onChange={(e) => setText(e.target.value)}
                 />
                 <div className="hint">
-                  밑줄은 <code>__밑줄__</code>, 굵게는 <code>**굵게**</code>, 수식은 <code>$x^{'{2}'}$</code>, 빈칸은 <code>[빈칸]</code> 으로 적으면 그대로 살아납니다.
+                  밑줄은 <code>__밑줄__</code>, 굵게는 <code>**굵게**</code>, 수식은 <code>{'$\\frac{1}{2}$'}</code> 같은 LaTeX 나 한글 수식 문법 <code>{'${1} over {2}$'}</code>, 화학식은 <code>{'$\\mathrm{H_2O}$'}</code>, 빈칸은 <code>[빈칸]</code> 으로 적으면 그대로 살아납니다.
                   한글·워드에서 복사한 글이라 줄이 엉켜 있으면 인식 방식을 ‘AI 정밀’로 고르세요.
                 </div>
               </>

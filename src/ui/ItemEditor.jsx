@@ -40,7 +40,7 @@ function MarkBar({ wrap }) {
     <div className="mk-bar">
       <B title="밑줄 (__ __)" onClick={() => wrap('__')}><u>가</u></B>
       <B title="굵게 (** **)" onClick={() => wrap('**')}><b>가</b></B>
-      <B title="수식 ($ $) — 한글 수식 문법" onClick={() => wrap('$', '$', 'x^{2}')}>∑</B>
+      <B title="수식 ($ $) — LaTeX 또는 한글 수식 문법" onClick={() => wrap('$', '$', 'x^{2}')}>∑</B>
       <B title="빈칸" onClick={() => wrap('[빈칸]', '', '')}>[　]</B>
       {['•', '①', '㉠', '→'].map((s) => (
         <B key={s} title={`${s} 넣기`} onClick={() => wrap(s, '', '')}>{s}</B>
