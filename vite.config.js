@@ -26,12 +26,16 @@ const cspPlugin = {
   },
 };
 
-const local = { host: '127.0.0.1', port: 5180, strictPort: true };
+const serverConfig = {
+  host: '0.0.0.0',
+  port: 3000,
+  strictPort: true,
+};
 
 export default defineConfig({
   base: './',
   plugins: [react(), cspPlugin],
-  server: local,
-  preview: local,
+  server: serverConfig,
+  preview: serverConfig,
   build: { chunkSizeWarningLimit: 1500 },
 });

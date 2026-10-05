@@ -29,7 +29,7 @@
 - 서버는 **127.0.0.1** 에만 열린다 (같은 네트워크의 다른 기기도 접속 불가).
 - 글꼴(Pretendard·Noto)과 PDF 문자표·해독기는 앱 안에 포함 → 인터넷 없이 동작.
 - 빌드본의 CSP 가 앱 자신과 `generativelanguage.googleapis.com` 외의 모든 통신을 차단.
-- 유일한 외부 통신은 스캔본·손글씨 **AI 인식**: 선생님이 본인 무료 Gemini 키를 넣고 쓸 때만. 모델은 기본으로 `gemini-flash-latest`(Google 이 늘 최신 Flash 로 바꿔 주는 별칭)를 쓴다.
+- 유일한 외부 통신은 스캔본·손글씨 **AI 인식**: 선생님이 본인 무료 Gemini 키를 넣고 쓸 때만.
 - 자료는 브라우저(IndexedDB·localStorage)에만 저장.
 
 ## 실행

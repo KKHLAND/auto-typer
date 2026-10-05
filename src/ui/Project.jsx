@@ -273,7 +273,7 @@ export default function Project({ record, pages, onSave, onBack, notify }) {
           pageImage={selBlock.page != null ? pages[selBlock.page]?.dataUrl : null}
           onChange={setBlock}
           onClose={() => setSel(null)}
-          onDelete={() => confirm('이 내용을 지울까요?') && removeBlock(selBlock.id)}
+          onDelete={() => removeBlock(selBlock.id)}
           onMove={(d) => moveBlock(selBlock.id, d)}
         />
       )}

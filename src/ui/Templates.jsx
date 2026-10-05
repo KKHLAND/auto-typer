@@ -9,6 +9,7 @@ export default function Templates({ notify }) {
   const [list, setList] = useState([]);
   const [info, setInfo] = useState({});
   const [busy, setBusy] = useState(false);
+  const [delTarget, setDelTarget] = useState(null);
   const input = useRef(null);
 
   const refresh = async () => {
@@ -87,7 +88,7 @@ export default function Templates({ notify }) {
               </div>
               <div className="foot">
                 {t.custom ? (
-                  <button className="btn sm danger" onClick={async () => { if (confirm('이 양식을 지울까요?')) { await removeCustomTemplate(t.id); refresh(); } }}>
+                  <button className="btn sm danger" onClick={() => setDelTarget(t)}>
                     <Ic.Trash size={13} /> 지우기
                   </button>
                 ) : (
@@ -98,6 +99,37 @@ export default function Templates({ notify }) {
           );
         })}
       </div>
+
+      {delTarget && (
+        <div className="modal-bg" onClick={() => setDelTarget(null)}>
+          <div className="modal" style={{ maxWidth: 400 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-h">
+              <span>양식 삭제</span>
+              <span className="grow" />
+              <button className="icon-btn" onClick={() => setDelTarget(null)} title="닫기">
+                <Ic.Close size={16} />
+              </button>
+            </div>
+            <div className="modal-b" style={{ fontSize: 14.5, color: 'var(--ink-2)', lineHeight: 1.6, padding: '12px 18px 20px' }}>
+              ‘<b>{delTarget.name}</b>’ 양식을 지울까요?
+            </div>
+            <div className="modal-f">
+              <button className="btn" onClick={() => setDelTarget(null)}>취소</button>
+              <button
+                className="btn danger"
+                style={{ background: 'var(--red)', color: '#fff', borderColor: 'var(--red)' }}
+                onClick={async () => {
+                  await removeCustomTemplate(delTarget.id);
+                  setDelTarget(null);
+                  refresh();
+                }}
+              >
+                삭제
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

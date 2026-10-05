@@ -121,7 +121,7 @@ a { color: var(--blue); text-decoration: none; }
 .table .muted { color: var(--ink-3); }
 .table .ellipsis { max-width: 520px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
 .table td.num { font-variant-numeric: tabular-nums; color: var(--ink-2); width: 64px; }
-.table .row-acts { opacity: 0; }
+.table .row-acts { opacity: 0.6; }
 .table tr.row:hover .row-acts { opacity: 1; }
 
 /* ───────── 빈 화면·업로드 ───────── */
@@ -278,16 +278,31 @@ body { font-size: 15px; background: var(--page); }
 .masthead .streak.a { right: 14%; width: 220px; }
 .masthead .streak.b { right: 2%; width: 120px; background: rgba(255, 255, 255, 0.07); }
 .masthead .mh-left { position: relative; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.mh-brand-btn {
+  background: none; border: 0; padding: 0; margin: 0; color: inherit; font: inherit; text-align: left;
+  cursor: pointer; display: flex; flex-direction: column; gap: 14px; outline: none; border-radius: 12px;
+  transition: opacity 0.15s ease;
+}
+.mh-brand-btn:hover { opacity: 0.95; }
+.mh-brand-btn:focus-visible { outline: 2px solid #fff; outline-offset: 4px; }
 .masthead .mh-row { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
 .masthead .mh-logo { width: 56px; height: 56px; flex: none; }
 .masthead h1 { margin: 0; font-size: 44px; font-weight: 800; letter-spacing: -1px; line-height: 1.1; }
 .masthead .mh-badge { display: inline-flex; align-items: center; height: 30px; padding: 0 14px; border-radius: 999px; border: 1.5px solid rgba(255, 255, 255, 0.75); background: rgba(255, 255, 255, 0.16); font-size: 15px; font-weight: 700; }
 .masthead p { margin: 0; font-size: 19px; font-weight: 500; }
 .masthead .mh-right { position: relative; display: flex; gap: 10px; align-items: center; }
-.mh-btn { width: 58px; height: 58px; border-radius: 14px; border: 0; background: rgba(255, 255, 255, 0.16); display: grid; place-items: center; color: #fff; }
+.mh-btn { width: 58px; height: 58px; border-radius: 14px; border: 0; background: rgba(255, 255, 255, 0.16); display: grid; place-items: center; color: #fff; cursor: pointer; }
 .mh-btn:hover { background: rgba(255, 255, 255, 0.26); }
-.mh-key { white-space: nowrap; height: 44px; padding: 0 16px; border-radius: 12px; border: 1.5px solid rgba(255, 255, 255, 0.55); background: rgba(255, 255, 255, 0.16); color: #fff; font-size: 15px; font-weight: 700; display: inline-flex; align-items: center; gap: 8px; }
+.mh-key { white-space: nowrap; height: 44px; padding: 0 16px; border-radius: 12px; border: 1.5px solid rgba(255, 255, 255, 0.55); background: rgba(255, 255, 255, 0.16); color: #fff; font-size: 15px; font-weight: 700; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
 .mh-key:hover { background: rgba(255, 255, 255, 0.26); }
+.mh-home-btn {
+  white-space: nowrap; height: 44px; padding: 0 18px; border-radius: 12px;
+  border: 1.5px solid rgba(255, 255, 255, 0.65); background: rgba(255, 255, 255, 0.16);
+  color: #fff; font-size: 15px; font-weight: 700; display: inline-flex; align-items: center;
+  gap: 8px; cursor: pointer; transition: all 0.15s ease;
+}
+.mh-home-btn:hover { background: rgba(255, 255, 255, 0.28); border-color: #fff; }
+.mh-home-btn.active { background: #fff; color: #0b86f3; border-color: #fff; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12); }
 
 .rail { padding: 28px 0; gap: 10px; border-right-color: #e6e9ef; overflow-y: auto; }
 .rail > * { flex: none; }
@@ -295,6 +310,11 @@ body { font-size: 15px; background: var(--page); }
 .rail .plus:hover { background: linear-gradient(160deg, #13a6f0, #0a6be0); }
 .rail-item { width: 82px; padding: 12px 0 10px; border-radius: 12px; gap: 6px; font-size: 15px; color: #4b5563; letter-spacing: 0; }
 .rail-item.on { background: #eaf3ff; color: var(--brand-deep); font-weight: 700; }
+.rail-badge {
+  position: absolute; top: -5px; right: -9px; min-width: 18px; height: 18px; padding: 0 4px;
+  border-radius: 999px; background: #0b86f3; color: #fff; font-size: 11px; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center; line-height: 1; border: 1.5px solid #fff;
+}
 
 .main { background: var(--page); }
 .content { padding: 36px 56px 56px; }

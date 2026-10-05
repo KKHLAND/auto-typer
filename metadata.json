@@ -1,0 +1,7 @@
+{
+  "name": "auto-typer",
+  "description": "학습자료 PDF·스캔본·손글씨·hwpx·텍스트를 원하는 학교 양식의 hwpx·PDF 로 바꿔 주는 선생님용 무료 도구",
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

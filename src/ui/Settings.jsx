@@ -8,6 +8,7 @@ export default function Settings({ settings, setSettings, notify, tab: initialTa
   const [show, setShow] = useState(false);
   const [models, setModels] = useState([]);
   const [checking, setChecking] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
 
   const check = async () => {
     setChecking(true);
@@ -60,7 +61,7 @@ export default function Settings({ settings, setSettings, notify, tab: initialTa
             </div>
           </div>
           <div className="kv">
-            <div className="k">모델<small>기본값 gemini-flash-latest 는 Google 이 늘 최신 Flash 모델로 바꿔 주어, 새 모델이 나오면 자동으로 씁니다.</small></div>
+            <div className="k">모델<small>최신 Flash 계열이 빠르고 무료 사용량이 넉넉합니다.</small></div>
             <div className="row-inline">
               {models.length ? (
                 <select className="select" style={{ maxWidth: 380 }} value={settings.model} onChange={(e) => setSettings({ ...settings, model: e.target.value })}>
@@ -105,17 +106,45 @@ export default function Settings({ settings, setSettings, notify, tab: initialTa
             <div>
               <button
                 className="btn danger"
-                onClick={async () => {
-                  if (!confirm('이 브라우저에 저장된 모든 학습자료·양식·설정을 지울까요? 되돌릴 수 없습니다.')) return;
-                  localStorage.clear();
-                  await new Promise((r) => { const q = indexedDB.deleteDatabase('auto-typer'); q.onsuccess = q.onerror = q.onblocked = r; });
-                  location.reload();
-                }}
+                onClick={() => setConfirmClear(true)}
               >
                 <Ic.Trash size={14} /> 모두 지우기
               </button>
             </div>
           </div>
+
+          {confirmClear && (
+            <div className="modal-bg" onClick={() => setConfirmClear(false)}>
+              <div className="modal" style={{ maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
+                <div className="modal-h">
+                  <span>저장된 자료 전체 삭제</span>
+                  <span className="grow" />
+                  <button className="icon-btn" onClick={() => setConfirmClear(false)} title="닫기">
+                    <Ic.Close size={16} />
+                  </button>
+                </div>
+                <div className="modal-b" style={{ fontSize: 14.5, color: 'var(--ink-2)', lineHeight: 1.6, padding: '12px 18px 20px' }}>
+                  이 브라우저에 저장된 모든 학습자료·양식·설정을 지울까요?<br />
+                  삭제된 자료는 되돌릴 수 없습니다.
+                </div>
+                <div className="modal-f">
+                  <button className="btn" onClick={() => setConfirmClear(false)}>취소</button>
+                  <button
+                    className="btn danger"
+                    style={{ background: 'var(--red)', color: '#fff', borderColor: 'var(--red)' }}
+                    onClick={async () => {
+                      setConfirmClear(false);
+                      localStorage.clear();
+                      await new Promise((r) => { const q = indexedDB.deleteDatabase('auto-typer'); q.onsuccess = q.onerror = q.onblocked = r; });
+                      location.reload();
+                    }}
+                  >
+                    모두 지우기
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

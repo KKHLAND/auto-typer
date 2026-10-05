@@ -78,11 +78,12 @@ export default function App() {
   };
 
   const nav = [
-    { key: 'home', label: '내 작업', icon: Ic.Home },
+    { key: 'home', label: '홈', icon: Ic.Home },
+    { key: 'projects', label: '내 작업', icon: Ic.List, badge: projects.length },
     { key: 'templates', label: '양식', icon: Ic.Layout },
     { key: 'settings', label: '설정', icon: Ic.Gear },
   ];
-  const active = view.name === 'project' || view.name === 'new' ? 'home' : view.name;
+  const active = view.name === 'project' || view.name === 'new' ? 'projects' : view.name;
 
   return (
     <div className="app">
@@ -90,17 +91,31 @@ export default function App() {
         <span className="streak a" />
         <span className="streak b" />
         <div className="mh-left">
-          <div className="mh-row">
-            <svg className="mh-logo" viewBox="0 0 56 56" aria-hidden="true">
-              <path d="M28 4 52 28 28 52 4 28Z" fill="#fff" />
-              <path d="M19 22h18M19 28h18M19 34h12" stroke="#0b86f3" strokeWidth="3.2" strokeLinecap="round" fill="none" />
-            </svg>
-            <h1>Auto-typer</h1>
-            <span className="mh-badge">에듀테크 표준 양식</span>
-          </div>
-          <p>스캔본·사진·손글씨·PDF 학습자료를 원하는 학교 양식의 HWPX·PDF로 즉시 변환</p>
+          <button
+            className="mh-brand-btn"
+            onClick={() => setView({ name: 'home' })}
+            title="홈 랜딩 페이지로 이동"
+            aria-label="Auto-typer 홈으로 이동"
+          >
+            <div className="mh-row">
+              <svg className="mh-logo" viewBox="0 0 56 56" aria-hidden="true">
+                <path d="M28 4 52 28 28 52 4 28Z" fill="#fff" />
+                <path d="M19 22h18M19 28h18M19 34h12" stroke="#0b86f3" strokeWidth="3.2" strokeLinecap="round" fill="none" />
+              </svg>
+              <h1>Auto-typer</h1>
+              <span className="mh-badge">에듀테크 표준 양식</span>
+            </div>
+            <p>스캔본·사진·손글씨·PDF 학습자료를 원하는 학교 양식의 HWPX·PDF로 즉시 변환</p>
+          </button>
         </div>
         <div className="mh-right">
+          <button
+            className={`mh-home-btn ${view.name === 'home' ? 'active' : ''}`}
+            onClick={() => setView({ name: 'home' })}
+            title="홈 랜딩 페이지 보기"
+          >
+            <Ic.Home size={18} /> <span>홈</span>
+          </button>
           {!settings.apiKey && (
             <button className="mh-key" onClick={() => setView({ name: 'settings' })} title="손글씨·스캔본 AI 인식 켜기">
               <Ic.Key size={18} /> <span>AI 인식 켜기</span>
@@ -118,7 +133,10 @@ export default function App() {
         </button>
         {nav.map((n) => (
           <button key={n.key} className={`rail-item ${active === n.key ? 'on' : ''}`} onClick={() => setView({ name: n.key })}>
-            <n.icon size={26} />
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <n.icon size={26} />
+              {n.badge > 0 && <span className="rail-badge">{n.badge}</span>}
+            </div>
             {n.label}
           </button>
         ))}
@@ -127,13 +145,34 @@ export default function App() {
 
       <main className="main">
         {view.name === 'home' && (
-          <Home projects={projects} onOpen={(id) => setView({ name: 'project', id })} onNew={() => setView({ name: 'new' })} onSample={openSample} onDelete={removeProject} />
+          <Home
+            mode="landing"
+            projects={projects}
+            onOpen={(id) => setView({ name: 'project', id })}
+            onNew={() => setView({ name: 'new' })}
+            onSample={openSample}
+            onDelete={removeProject}
+            onViewProjects={() => setView({ name: 'projects' })}
+            onViewHome={() => setView({ name: 'home' })}
+          />
+        )}
+        {view.name === 'projects' && (
+          <Home
+            mode="projects"
+            projects={projects}
+            onOpen={(id) => setView({ name: 'project', id })}
+            onNew={() => setView({ name: 'new' })}
+            onSample={openSample}
+            onDelete={removeProject}
+            onViewProjects={() => setView({ name: 'projects' })}
+            onViewHome={() => setView({ name: 'home' })}
+          />
         )}
         {view.name === 'new' && (
-          <NewJob settings={settings} onCancel={() => setView({ name: 'home' })} onDone={createProject} onSettings={() => setView({ name: 'settings' })} notify={notify} />
+          <NewJob settings={settings} onCancel={() => setView({ name: projects.length ? 'projects' : 'home' })} onDone={createProject} onSettings={() => setView({ name: 'settings' })} notify={notify} />
         )}
         {view.name === 'project' && (
-          <ProjectLoader id={view.id} projects={projects} onSave={saveProject} onBack={() => setView({ name: 'home' })} notify={notify} settings={settings} />
+          <ProjectLoader id={view.id} projects={projects} onSave={saveProject} onBack={() => setView({ name: 'projects' })} notify={notify} settings={settings} />
         )}
         {view.name === 'templates' && <Templates notify={notify} />}
         {view.name === 'settings' && <Settings settings={settings} setSettings={setSettings} notify={notify} tab={view.tab} />}

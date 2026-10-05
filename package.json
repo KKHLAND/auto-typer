@@ -8,7 +8,7 @@
     "dev": "vite",
     "prebuild": "node tools/copy-pdfjs-assets.mjs",
     "build": "vite build",
-    "start": "vite build && vite preview",
+    "start": "node server.ts",
     "preview": "vite preview",
     "test": "node tests/engine.test.mjs && node tests/math.test.mjs && node tests/figure-clean.test.mjs && node tests/escapes.test.mjs && node tests/exam-layout.test.mjs",
     "templates": "node tools/make-templates.mjs"
