@@ -5,6 +5,7 @@ import { unzipSync } from 'fflate';
 import { loadHwpx, buildHwpx, collectHeaderTexts } from '../src/engine/hwpx.js';
 import { toHwpEquation } from '../src/engine/equation.js';
 import { parseText } from '../src/engine/textParser.js';
+import { decodeHancomPua, hasHancomPua } from '../src/engine/hwpPua.js';
 import { assemble } from '../src/model.js';
 
 mkdirSync('tests/out', { recursive: true });
@@ -29,6 +30,13 @@ const cases = [
   [String.raw`\text{넓이} = \pi r^2`, '"넓이" = pi r ^{2}'], // 한글은 따옴표 글자 // 중괄호 없는 첨자는 한 덩이만 (한글은 띄어 쓰기 전까지 모두 첨자로 묶는다)
 ];
 for (const [src, want] of cases) expect(`${src} → ${toHwpEquation(src)}`, toHwpEquation(src) === want);
+
+// 1-1) 한컴 PUA 수식 글꼴 해독 (평가원 수능 수학 영역 1~2번 표본)
+const puaRaw = '1.    ×   의 값은? [2점]\n2. 함수     에 대하여 lim';
+expect('PUA 문자 감지', hasHancomPua(puaRaw));
+const puaDecoded = decodeHancomPua(puaRaw);
+expect('PUA 숫자·기호 복원', puaDecoded.includes('1. 9 ―4 1 ×3- ―2 1 의 값은? [2점]'));
+expect('PUA 함수·변수 복원', puaDecoded.includes('2. 함수 f(x) = 3x3 +4x +1에 대하여 lim'));
 
 // 2) kordoc 식 마크다운: 수식 속 LaTeX 는 이스케이프 풀기에서 지켜지고, 글 속 \$ 는 글자 $
 const md = String.raw`행렬 $\begin{pmatrix} 1 & 2 \\ 3 & 4 \end{pmatrix}$ 와 집합 $\{x \mid x>0\}$, 가격 \$40

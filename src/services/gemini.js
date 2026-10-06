@@ -105,17 +105,21 @@ const RULES = `너는 한국 학교 선생님의 학습자료(수업 자료·학
    답 칸 안에 연하게 인쇄된 자리표시 문구(예: "이곳에 … 작성하세요...", "Write your … here...", "Dear Auggie, ...")는 옮기지 않는다.`;
 
 const HANDWRITING = {
-  ignore: `7. 손으로 쓴 필기(풀이 흔적, 계산, 체크 표시, 동그라미·가위표, 펜으로 그은 밑줄, 메모, 낙서)는 모두 무시하고 인쇄된 내용만 옮긴다.
-   펜으로 그은 밑줄은 인쇄 밑줄이 아니므로 __ __ 로 표시하지 않는다.`,
+  auto: `7. 손글씨 자동 판단:
+   - 인쇄된 시험지·문제지·교재 위에 끄적인 손글씨(풀이 흔적, 연필 계산, 체크 표시, 정답 동그라미/가위표, 밑줄, 낙서 등)는 무시하고 인쇄된 문제·지문·선택지만 깔끔하게 옮긴다.
+   - 단, 판서 사진·자필 필기노트·원고처럼 손글씨 자체가 주 내용인 자료이거나, 인쇄된 활동지/서술형 답안 칸에 직접 작성한 답안 내용은 학습 내용으로 보아 그대로 빠짐없이 옮긴다.
+   - 흐린 글자는 1번 규칙대로 맥락으로 추정해 채우고 uncertain=true.`,
   include: `7. 이 자료에는 손으로 쓴 판서·필기·메모·원고가 들어 있을 수 있다. 손글씨도 학습 내용으로 보고 쓰인 그대로 빠짐없이 옮긴다.
    글씨를 고치거나 문장을 다듬지 말고, 화살표·번호·들여쓰기로 표현된 순서와 위계는 문단과 번호로 살린다.
    지운 흔적·줄 그어 지운 글자·연습 계산은 옮기지 않는다. 흐린 글자는 1번 규칙대로 맥락으로 추정해 채우고 uncertain=true.`,
+  ignore: `7. 손으로 쓴 필기(풀이 흔적, 계산, 체크 표시, 동그라미·가위표, 펜으로 그은 밑줄, 메모, 낙서)는 모두 무시하고 인쇄된 내용만 옮긴다.
+   펜으로 그은 밑줄은 인쇄 밑줄이 아니므로 __ __ 로 표시하지 않는다.`,
 };
 
-export function prompt({ handwriting = 'include', subject = '', pageNo, totalPages, isText }) {
+export function prompt({ handwriting = 'auto', subject = '', pageNo, totalPages, isText }) {
   return [
     RULES,
-    HANDWRITING[handwriting] ?? HANDWRITING.include,
+    HANDWRITING[handwriting] ?? HANDWRITING.auto,
     subject ? `과목 참고: ${subject}` : '',
     isText
       ? '아래는 학습자료에서 복사한 텍스트다. 줄바꿈이 깨져 있을 수 있으니 내용은 그대로 두고 구조만 판단해 블록으로 나눠라.'

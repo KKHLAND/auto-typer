@@ -1,6 +1,7 @@
 // 변환 파이프라인: 올린 파일·붙여넣은 글 → 학습자료 문서
 import { assemble, importJson, newDoc } from '../model.js';
 import { parseText } from '../engine/textParser.js';
+import { formatPuaMathLines } from '../engine/hwpPua.js';
 import { hwpxToText, hwpxImages } from '../engine/hwpxReader.js';
 import { openPdf, renderPage, pageText, cropFigure, cropContext, imageFileToPage, loadImage } from './pdf.js';
 import { recognizePage, structureText, refineFigureBox } from './gemini.js';
@@ -126,6 +127,7 @@ export async function convert({ files = [], text = '', settings, title, onProgre
     const total = pdf.numPages;
     const local = [];
     let textChars = 0;
+    let totalPua = 0;
     const texts = [];
     for (let n = 1; n <= total; n++) {
       if (signal?.aborted) throw new DOMException('취소됨', 'AbortError');
@@ -136,15 +138,20 @@ export async function convert({ files = [], text = '', settings, title, onProgre
       local.push(pg);
       const t = await pageText(pdf, n);
       textChars += t.chars;
+      totalPua += t.puaCount || 0;
       texts.push(t.text);
     }
     pdf.loadingTask?.destroy?.(); // 쪽 그림·글자는 다 뽑았으니 pdf.js 메모리 정리
+    const fullText = texts.join(' ');
     const scanned = textChars < total * 80; // 글자층이 거의 없으면 스캔본
-    // 글자 있는 PDF 는 kordoc 이 이 컴퓨터 안에서 빠르게 (제목·목록·표·밑줄까지) — 'AI 정밀'을 고를 때만 Gemini
+    // 수학 수식 시험지 판정 (PUA 수식 글꼴이 많거나 시험지 고유 문구 포함)
+    const isMathOrExam = totalPua >= 10 || /수학\s*영역|[\[【]\s*[234]\s*점\s*[\]】]|홀수형|짝수형|5지선다형|대학수학능력시험/.test(fullText);
     const wantAi = engine === 'ai';
-    if (wantAi || scanned) {
+    const autoAi = engine === 'auto' && hasKey && (scanned || isMathOrExam);
+
+    if (wantAi || autoAi || (scanned && hasKey)) {
       if (!hasKey) {
-        throw new Error('스캔본(또는 손글씨) PDF 는 AI 인식이 필요합니다. 설정에서 무료 Gemini API 키를 넣어 주세요.');
+        throw new Error('수학 수식 시험지 또는 스캔본 PDF 는 AI 정밀 인식이 필요합니다. 설정에서 무료 Gemini API 키를 넣어 주세요.');
       }
       engineUsed = 'ai';
       for (let i = 0; i < local.length; i++) {
@@ -152,19 +159,30 @@ export async function convert({ files = [], text = '', settings, title, onProgre
         await aiPage(local[i], i, local.length);
       }
     } else {
-      let kd = null;
-      try {
-        onProgress({ stage: 'render', status: 'running', message: `${file.name} 구조 읽는 중 (kordoc)` });
-        kd = await kordocParse(await file.arrayBuffer(), file.name);
-        if (engineUsed !== 'ai') engineUsed = 'kordoc';
-      } catch (e) {
-        console.warn('kordoc 실패 — 쪽 글자층으로 대신 읽음', e);
+      if (isMathOrExam && !hasKey) {
+        onProgress({
+          stage: 'render',
+          status: 'running',
+          message: '수학 시험지 감지 — 수식 해독 중 (AI 키 등록 시 수식·그래프 100% 추출)',
+        });
       }
-      if (kd?.markdown.trim()) blocks.push(...(await withFigures(parseText(kd.markdown), kd.images)));
-      else {
+      let kd = null;
+      if (!isMathOrExam) {
+        try {
+          onProgress({ stage: 'render', status: 'running', message: `${file.name} 구조 읽는 중 (kordoc)` });
+          kd = await kordocParse(await file.arrayBuffer(), file.name);
+          if (engineUsed !== 'ai') engineUsed = 'kordoc';
+        } catch (e) {
+          console.warn('kordoc 실패 — 쪽 글자층으로 대신 읽음', e);
+        }
+      }
+      if (kd?.markdown?.trim()) {
+        blocks.push(...(await withFigures(parseText(kd.markdown), kd.images)));
+      } else {
         const base = pages.length - local.length;
         texts.forEach((t, i) => {
-          for (const b of parseText(t)) blocks.push({ ...b, page: base + i });
+          const formatted = isMathOrExam ? formatPuaMathLines(t) : t;
+          for (const b of parseText(formatted)) blocks.push({ ...b, page: base + i });
         });
       }
     }

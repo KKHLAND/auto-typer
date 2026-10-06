@@ -2,6 +2,7 @@
 import * as pdfjs from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { cleanFigure } from '../engine/figureClean.js';
+import { decodeHancomPua } from '../engine/hwpPua.js';
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -43,11 +44,23 @@ export async function pageText(pdf, n) {
   const page = await pdf.getPage(n);
   const vp = page.getViewport({ scale: 1 });
   const tc = await page.getTextContent();
+  let puaCount = 0;
   const items = tc.items
     .filter((it) => it.str !== undefined)
-    .map((it) => ({ s: it.str, x: it.transform[4], y: vp.height - it.transform[5], w: it.width, h: Math.abs(it.transform[3]) || 10, eol: it.hasEOL }));
+    .map((it) => {
+      const puaMatches = it.str.match(/[\uE000-\uF8FF]/g);
+      if (puaMatches) puaCount += puaMatches.length;
+      return {
+        s: decodeHancomPua(it.str),
+        x: it.transform[4],
+        y: vp.height - it.transform[5],
+        w: it.width,
+        h: Math.abs(it.transform[3]) || 10,
+        eol: it.hasEOL,
+      };
+    });
   const chars = items.reduce((n, it) => n + it.s.trim().length, 0);
-  if (!chars) return { text: '', chars: 0 };
+  if (!chars) return { text: '', chars: 0, puaCount: 0 };
 
   // 단 나누기: 가운데 근처에서 글자가 거의 지나가지 않는 세로 띠를 찾는다
   const mid = vp.width / 2;
@@ -92,7 +105,7 @@ export async function pageText(pdf, n) {
     if (prev && !prev.colBreak && !cur.colBreak && cur.y - prev.y > prev.h * 2.1) lines.push('');
     lines.push(cur.s);
   }
-  return { text: lines.join('\n'), chars };
+  return { text: lines.join('\n'), chars, puaCount };
 }
 
 /**

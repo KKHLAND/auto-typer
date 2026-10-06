@@ -39,9 +39,10 @@ export const all = (store) => tx(store, 'readonly', (s) => s.getAll());
 const SKEY = 'auto-typer/settings/v1';
 export function loadSettings() {
   try {
-    return { apiKey: '', model: '', handwriting: 'include', engine: 'auto', ...JSON.parse(localStorage.getItem(SKEY) || '{}') };
+    const raw = JSON.parse(localStorage.getItem(SKEY) || '{}');
+    return { apiKey: '', model: '', handwriting: 'auto', engine: 'auto', ...raw, handwriting: raw.handwriting || 'auto' };
   } catch {
-    return { apiKey: '', model: '', handwriting: 'include', engine: 'auto' };
+    return { apiKey: '', model: '', handwriting: 'auto', engine: 'auto' };
   }
 }
 export function saveSettings(s) {

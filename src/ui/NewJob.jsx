@@ -14,7 +14,7 @@ export default function NewJob({ settings, onCancel, onDone, onSettings, notify 
   const [templates, setTemplates] = useState([]);
   const [templateId, setTemplateId] = useState('sample');
   const [engine, setEngine] = useState(settings.engine || 'auto');
-  const [handwriting, setHandwriting] = useState(settings.handwriting || 'include');
+  const [handwriting, setHandwriting] = useState(settings.handwriting || 'auto');
   const [drag, setDrag] = useState(false);
   const [running, setRunning] = useState(false);
   const [log, setLog] = useState([]);
@@ -31,7 +31,8 @@ export default function NewJob({ settings, onCancel, onDone, onSettings, notify 
     if (!title && arr[0]) setTitle(arr[0].name.replace(/\.[^.]+$/, ''));
   };
 
-  const needsAi = files.some((f) => ['image'].includes(fileKind(f.name)));
+  const isMathOrExamFile = files.some((f) => /수학|수능|모의|시험|기출|물리|화학|생명|지구/i.test(f.name));
+  const needsAi = files.some((f) => ['image'].includes(fileKind(f.name))) || (isMathOrExamFile && engine === 'ai');
   const canStart = (files.length || text.trim()) && !running;
 
   const start = async () => {
@@ -58,7 +59,11 @@ export default function NewJob({ settings, onCancel, onDone, onSettings, notify 
         setRunning(false);
         return;
       }
-      notify(`내용 ${q}덩이를 정리했습니다. 원본과 대조해 확인해 주세요.`);
+      if (res.engineUsed !== 'ai' && isMathOrExamFile) {
+        notify(`내용 ${q}덩이를 규칙으로 정리했습니다. (수식·그래프를 완벽히 살리시려면 무료 Gemini 키를 등록해 보세요.)`);
+      } else {
+        notify(`내용 ${q}덩이를 정리했습니다. 원본과 대조해 확인해 주세요.`);
+      }
       await onDone({ doc: res.doc, pages: res.pages, templateId, sourceName: files.map((f) => f.name).join(', ') || '붙여넣기', engineUsed: res.engineUsed });
     } catch (e) {
       if (e.name !== 'AbortError') notify(e.message || String(e), 'err');
@@ -190,21 +195,44 @@ export default function NewJob({ settings, onCancel, onDone, onSettings, notify 
               </div>
             </div>
             <div className="field">
-              <span className="lab">손글씨</span>
+              <span className="lab">손글씨 처리</span>
               <div className="seg">
-                <button className={handwriting === 'include' ? 'on' : ''} onClick={() => setHandwriting('include')}>손글씨 그대로 정리</button>
-                <button className={handwriting === 'ignore' ? 'on' : ''} onClick={() => setHandwriting('ignore')}>인쇄 내용만</button>
+                {[
+                  ['auto', '자동'],
+                  ['include', '손글씨 포함'],
+                  ['ignore', '인쇄 내용만'],
+                ].map(([k, l]) => (
+                  <button
+                    key={k}
+                    className={(handwriting || 'auto') === k ? 'on' : ''}
+                    onClick={() => setHandwriting(k)}
+                  >
+                    {l}
+                  </button>
+                ))}
               </div>
               <div className="hint">
-                {handwriting === 'include'
-                  ? '손으로 쓴 판서·필기·원고를 빠르게 읽어 내용 그대로 깔끔한 문서로 정리합니다. 흐린 글자는 맥락으로 채우고 노란색으로 표시해 ‘확인 필요’로 둡니다.'
-                  : '풀이 흔적·체크·낙서가 있는 자료도 인쇄된 내용만 옮깁니다.'}
+                {(handwriting || 'auto') === 'auto' &&
+                  '자료의 성격에 맞춰 자동 판단합니다. 시험지·교재 위의 풀이 흔적·낙서는 걸러내고, 판서 사진·자필 노트·활동지 답안은 내용으로 살립니다.'}
+                {handwriting === 'include' &&
+                  '손으로 쓴 판서·필기·원고를 빠르게 읽어 내용 그대로 깔끔한 문서로 정리합니다. 흐린 글자는 맥락으로 채우고 노란색으로 표시해 ‘확인 필요’로 둡니다.'}
+                {handwriting === 'ignore' &&
+                  '풀이 흔적·체크·낙서가 있는 자료도 인쇄된 내용만 옮깁니다.'}
               </div>
             </div>
-            {!settings.apiKey && (engine === 'ai' || needsAi) && (
+            {!settings.apiKey && (engine === 'ai' || needsAi || isMathOrExamFile) && (
               <div className="notice-box" style={{ marginBottom: 12 }}>
-                AI 인식에는 선생님 본인의 <b>무료 Gemini API 키</b>가 필요합니다. 1분이면 받을 수 있어요.{' '}
-                <button className="btn sm" onClick={onSettings}><Ic.Key size={13} /> 키 넣으러 가기</button>
+                {isMathOrExamFile ? (
+                  <>
+                    수학·과학 시험지는 <b>무료 Gemini API 키</b>를 등록하시면 수식(LaTeX)과 도형·그래프 그림까지 100% 온전하게 추출됩니다.{' '}
+                    <button className="btn sm" onClick={onSettings}><Ic.Key size={13} /> 키 등록하기 (무료)</button>
+                  </>
+                ) : (
+                  <>
+                    AI 인식에는 선생님 본인의 <b>무료 Gemini API 키</b>가 필요합니다. 1분이면 받을 수 있어요.{' '}
+                    <button className="btn sm" onClick={onSettings}><Ic.Key size={13} /> 키 넣으러 가기</button>
+                  </>
+                )}
               </div>
             )}
             <button className="btn-start" disabled={!canStart} onClick={start}>
