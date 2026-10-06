@@ -139,6 +139,27 @@ export default function Settings({ settings, setSettings, notify, tab: initialTa
               ))}
             </div>
           </div>
+          <div className="kv">
+            <div className="k">
+              MD 파싱 결과 처리
+              <small>텍스트를 kordoc 엔진으로 파싱한 뒤 바로 생성할지, MD 파일로 다운로드해 보관할지 선택합니다.</small>
+            </div>
+            <div className="seg">
+              {[
+                ['ask', '선택 창 표시'],
+                ['direct', '바로 생성'],
+                ['download', 'MD 다운로드'],
+              ].map(([k, l]) => (
+                <button
+                  key={k}
+                  className={(settings.mdAction || 'ask') === k ? 'on' : ''}
+                  onClick={() => setSettings({ ...settings, mdAction: k })}
+                >
+                  {l}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 

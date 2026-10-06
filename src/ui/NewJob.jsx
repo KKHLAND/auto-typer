@@ -4,7 +4,12 @@ import { convert, fileKind } from '../services/convert.js';
 import { listTemplates } from '../services/templates.js';
 
 const KIND_LABEL = { pdf: 'PDF', image: '이미지', hwpx: 'HWPX', json: 'JSON', text: 'TXT', unknown: '?' };
-const extLabel = (name) => { const k = fileKind(name); return k === 'office' ? name.split('.').pop().toUpperCase() : KIND_LABEL[k]; };
+const extLabel = (name) => {
+  const ext = name.toLowerCase().split('.').pop();
+  if (['md', 'markdown'].includes(ext)) return 'MD';
+  const k = fileKind(name);
+  return k === 'office' ? ext.toUpperCase() : KIND_LABEL[k];
+};
 
 export default function NewJob({ settings, onCancel, onDone, onSettings, notify }) {
   const [tab, setTab] = useState('file');
@@ -15,9 +20,14 @@ export default function NewJob({ settings, onCancel, onDone, onSettings, notify 
   const [templateId, setTemplateId] = useState('sample');
   const [engine, setEngine] = useState(settings.engine || 'auto');
   const [handwriting, setHandwriting] = useState(settings.handwriting || 'auto');
+  const [mdAction, setMdAction] = useState(settings.mdAction || 'ask');
   const [drag, setDrag] = useState(false);
   const [running, setRunning] = useState(false);
   const [log, setLog] = useState([]);
+  const [parsedResult, setParsedResult] = useState(null);
+  const [downloadedMd, setDownloadedMd] = useState(false);
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
   const abort = useRef(null);
   const input = useRef(null);
 
@@ -34,6 +44,56 @@ export default function NewJob({ settings, onCancel, onDone, onSettings, notify 
   const isMathOrExamFile = files.some((f) => /수학|수능|모의|시험|기출|물리|화학|생명|지구/i.test(f.name));
   const needsAi = files.some((f) => ['image'].includes(fileKind(f.name))) || (isMathOrExamFile && engine === 'ai');
   const canStart = (files.length || text.trim()) && !running;
+
+  const proceedCreate = async (res, tplId, srcName) => {
+    const q = res.doc.blocks.length;
+    if (res.engineUsed === 'kordoc') {
+      notify(`kordoc 엔진으로 내용 ${q}덩이를 빠르게 파싱하고 HWPX 문서를 생성했습니다.`);
+    } else if (res.engineUsed !== 'ai' && isMathOrExamFile) {
+      notify(`내용 ${q}덩이를 규칙으로 정리했습니다. (수식·그래프를 완벽히 살리시려면 무료 Gemini 키를 등록해 보세요.)`);
+    } else {
+      notify(`내용 ${q}덩이를 정리했습니다. 원본과 대조해 확인해 주세요.`);
+    }
+    await onDone({
+      doc: res.doc,
+      pages: res.pages,
+      templateId: tplId,
+      sourceName: srcName,
+      engineUsed: res.engineUsed,
+      markdown: res.markdown,
+    });
+  };
+
+  const downloadParsedMd = () => {
+    if (!parsedResult?.res?.markdown) return;
+    const mdName = `${(parsedResult.title || '학습자료').replace(/[\\/:*?"<>|]/g, '_')}.md`;
+    const blob = new Blob([parsedResult.res.markdown], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    Object.assign(document.createElement('a'), { href: url, download: mdName }).click();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    setDownloadedMd(true);
+    notify(`'${mdName}' 마크다운 파일이 다운로드되었습니다. 나중에 이 파일로 즉시 바로 생성할 수 있습니다.`);
+  };
+
+  const downloadAndFinish = () => {
+    downloadParsedMd();
+    setParsedResult(null);
+    onCancel?.();
+  };
+
+  const downloadAndCreate = async () => {
+    downloadParsedMd();
+    await proceedCreate(parsedResult.res, parsedResult.templateId, parsedResult.sourceName);
+  };
+
+  const copyParsedMd = () => {
+    if (!parsedResult?.res?.markdown) return;
+    navigator.clipboard?.writeText(parsedResult.res.markdown).then(() => {
+      setCopiedMd(true);
+      setTimeout(() => setCopiedMd(false), 2000);
+      notify('마크다운 텍스트를 클립보드에 복사했습니다.');
+    });
+  };
 
   const start = async () => {
     setRunning(true);
@@ -59,12 +119,43 @@ export default function NewJob({ settings, onCancel, onDone, onSettings, notify 
         setRunning(false);
         return;
       }
-      if (res.engineUsed !== 'ai' && isMathOrExamFile) {
-        notify(`내용 ${q}덩이를 규칙으로 정리했습니다. (수식·그래프를 완벽히 살리시려면 무료 Gemini 키를 등록해 보세요.)`);
-      } else {
-        notify(`내용 ${q}덩이를 정리했습니다. 원본과 대조해 확인해 주세요.`);
+      setRunning(false);
+
+      const sourceName = files.map((f) => f.name).join(', ') || '붙여넣기';
+      const isAlreadyMd = tab === 'file' && files.length === 1 && /\.md$|\.markdown$/i.test(files[0].name);
+
+      // 이미지 생성을 하지 않는 경우(텍스트만 있는 경우, kordoc 엔진 사용 시):
+      // 이미 .md 파일을 올려 변환한 경우가 아니라면, 설정(mdAction)에 따라 바로 생성하거나 선택권을 제공
+      if (res.engineUsed !== 'ai' && !isAlreadyMd) {
+        if (mdAction === 'direct') {
+          await proceedCreate(res, templateId, sourceName);
+          return;
+        }
+        if (mdAction === 'download') {
+          const mdName = `${(title || res.doc.title || '학습자료').replace(/[\\/:*?"<>|]/g, '_')}.md`;
+          const blob = new Blob([res.markdown], { type: 'text/markdown;charset=utf-8' });
+          const url = URL.createObjectURL(blob);
+          Object.assign(document.createElement('a'), { href: url, download: mdName }).click();
+          setTimeout(() => URL.revokeObjectURL(url), 4000);
+          notify(`'${mdName}' 마크다운 파일이 다운로드되었습니다. 나중에 이 파일을 올려 즉시 바로 생성할 수 있습니다.`);
+          onCancel?.();
+          return;
+        }
+
+        // mdAction === 'ask': 사용자에게 바로 생성 또는 다운로드 후 나중에 생성 선택권 제공
+        setParsedResult({
+          res,
+          templateId,
+          sourceName,
+          title: title || res.doc.title || '새 학습자료',
+        });
+        setDownloadedMd(false);
+        setCopiedMd(false);
+        setShowPreview(false);
+        return;
       }
-      await onDone({ doc: res.doc, pages: res.pages, templateId, sourceName: files.map((f) => f.name).join(', ') || '붙여넣기', engineUsed: res.engineUsed });
+
+      await proceedCreate(res, templateId, sourceName);
     } catch (e) {
       if (e.name !== 'AbortError') notify(e.message || String(e), 'err');
       setRunning(false);
@@ -126,17 +217,30 @@ export default function NewJob({ settings, onCancel, onDone, onSettings, notify 
                 </div>
                 {!!files.length && (
                   <div className="filelist">
-                    {files.map((f, i) => (
-                      <div className="file" key={i}>
-                        <span className="ext">{extLabel(f.name)}</span>
-                        <span className="grow">{f.name}</span>
-                        <span className="muted" style={{ fontSize: 12, color: 'var(--ink-3)' }}>{(f.size / 1024).toFixed(0)} KB</span>
-                        <button className="icon-btn" onClick={() => setFiles(files.filter((_, k) => k !== i))} title="빼기">
-                          <Ic.Close size={14} />
-                        </button>
-                      </div>
-                    ))}
-                    <div className="hint">여러 파일은 올린 순서대로 이어 붙여 한 학습자료로 만듭니다. 예전 .hwp·워드·엑셀·글자 있는 PDF 는 kordoc 으로 이 컴퓨터 안에서 바로 읽습니다.</div>
+                    {files.map((f, i) => {
+                      const isMd = /\.md$|\.markdown$/i.test(f.name);
+                      return (
+                        <div className="file" key={i}>
+                          <span className={`ext ${isMd ? 'green' : ''}`}>{extLabel(f.name)}</span>
+                          <span className="grow">
+                            {f.name}
+                            {isMd && (
+                              <span className="chip green" style={{ marginLeft: 8, fontSize: 11, padding: '1px 6px' }}>
+                                <Ic.Check size={11} /> 즉시 생성 가능
+                              </span>
+                            )}
+                          </span>
+                          <span className="muted" style={{ fontSize: 12, color: 'var(--ink-3)' }}>{(f.size / 1024).toFixed(0)} KB</span>
+                          <button className="icon-btn" onClick={() => setFiles(files.filter((_, k) => k !== i))} title="빼기">
+                            <Ic.Close size={14} />
+                          </button>
+                        </div>
+                      );
+                    })}
+                    <div className="hint">
+                      여러 파일은 올린 순서대로 이어 붙여 한 학습자료로 만듭니다. 예전 .hwp·워드·엑셀·글자 있는 PDF·<b>마크다운(.md)</b>은 kordoc 으로 이 컴퓨터 안에서 바로 읽습니다.
+                      <b style={{ display: 'block', marginTop: 4, color: 'var(--blue)' }}>이전에 다운로드한 .md 파일을 올리면 파싱 대기 없이 즉시 초고속으로 HWPX를 바로 생성합니다.</b>
+                    </div>
                   </div>
                 )}
               </>
@@ -220,6 +324,32 @@ export default function NewJob({ settings, onCancel, onDone, onSettings, notify 
                   '풀이 흔적·체크·낙서가 있는 자료도 인쇄된 내용만 옮깁니다.'}
               </div>
             </div>
+            <div className="field">
+              <span className="lab">MD 파싱 후 작업</span>
+              <div className="seg">
+                {[
+                  ['ask', '선택 창 표시'],
+                  ['direct', '바로 생성'],
+                  ['download', 'MD 다운로드만'],
+                ].map(([k, l]) => (
+                  <button
+                    key={k}
+                    className={(mdAction || 'ask') === k ? 'on' : ''}
+                    onClick={() => setMdAction(k)}
+                  >
+                    {l}
+                  </button>
+                ))}
+              </div>
+              <div className="hint">
+                {(mdAction || 'ask') === 'ask' &&
+                  '텍스트 파싱 후 [지금 바로 생성]할지, [MD 다운로드 후 나중에 생성]할지 선택 창을 띄웁니다.'}
+                {mdAction === 'direct' &&
+                  '파싱이 끝나면 확인 창 없이 즉시 학습자료(HWPX)를 생성하고 편집을 시작합니다.'}
+                {mdAction === 'download' &&
+                  '파싱된 .md 파일을 내 컴퓨터에 다운로드하고 완료합니다. (나중에 .md 파일로 언제든 바로 생성 가능)'}
+              </div>
+            </div>
             {!settings.apiKey && (engine === 'ai' || needsAi || isMathOrExamFile) && (
               <div className="notice-box" style={{ marginBottom: 12 }}>
                 {isMathOrExamFile ? (
@@ -258,6 +388,141 @@ export default function NewJob({ settings, onCancel, onDone, onSettings, notify 
           </div>
         </div>
       </div>
+
+      {parsedResult && (
+        <div className="modal-bg" onClick={() => setParsedResult(null)}>
+          <div className="modal" style={{ maxWidth: 660 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-h">
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span className="chip green"><Ic.Check size={13} /> kordoc 파싱 완료</span>
+                <span>다음 작업을 선택해 주세요</span>
+              </span>
+              <span className="grow" />
+              <button className="icon-btn" onClick={() => setParsedResult(null)} title="닫기">
+                <Ic.Close size={16} />
+              </button>
+            </div>
+            <div className="modal-b">
+              <p style={{ margin: '0 0 14px', fontSize: 13.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
+                이미지 생성이 불필요하여 <b>kordoc 엔진</b>으로 문서를 초고속 파싱했습니다.<br />
+                <b>지금 바로 HWPX 문서를 생성</b>할 수도 있고, <b>MD 파일로 다운로드하여 나중에 생성</b>할 수도 있습니다.
+              </p>
+
+              <div className="choice-grid">
+                <div
+                  className="choice-card primary"
+                  onClick={() => proceedCreate(parsedResult.res, parsedResult.templateId, parsedResult.sourceName)}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ background: 'var(--blue)', color: '#fff', borderRadius: 8, width: 28, height: 28, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                      <Ic.Sparkle size={15} />
+                    </span>
+                    <b style={{ fontSize: 15, color: '#1e40af' }}>바로 문서 생성</b>
+                    <span className="chip solid-blue" style={{ marginLeft: 'auto', fontSize: 11 }}>추천</span>
+                  </div>
+                  <p style={{ margin: 0, fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.5 }}>
+                    추가 다운로드 없이 지금 즉시 HWPX 학습자료를 만들고 편집을 시작합니다.
+                  </p>
+                  <button className="btn primary sm" style={{ marginTop: 'auto', width: '100%', justifyContent: 'center' }}>
+                    지금 바로 생성하기 →
+                  </button>
+                </div>
+
+                <div
+                  className="choice-card secondary"
+                  onClick={downloadAndFinish}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ background: '#059669', color: '#fff', borderRadius: 8, width: 28, height: 28, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                      <Ic.Download size={15} />
+                    </span>
+                    <b style={{ fontSize: 15, color: '#065f46' }}>다운로드 (나중에 생성)</b>
+                  </div>
+                  <p style={{ margin: 0, fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.5 }}>
+                    .md 파일을 내 컴퓨터에 저장하고 완료합니다. 나중에 이 파일을 올려 즉시 바로 생성할 수 있습니다.
+                  </p>
+                  <button className="btn sm" style={{ marginTop: 'auto', width: '100%', justifyContent: 'center', fontWeight: 600, color: '#065f46', borderColor: '#a7f3d0' }}>
+                    <Ic.Download size={13} /> MD 다운로드 후 저장
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'center', margin: '0 0 14px' }}>
+                <button className="btn sm ghost" onClick={downloadAndCreate} style={{ gap: 6 }}>
+                  <Ic.Download size={13} /> MD 파일 다운로드도 하고 지금 바로 생성하기
+                </button>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 12 }}>
+                <div style={{ background: 'var(--bg-1, #f8fafc)', border: '1px solid var(--line)', borderRadius: 8, padding: '9px 12px' }}>
+                  <div style={{ fontSize: 11, color: 'var(--ink-3)', fontWeight: 600 }}>문서 제목</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={parsedResult.title}>
+                    {parsedResult.title}
+                  </div>
+                </div>
+                <div style={{ background: 'var(--bg-1, #f8fafc)', border: '1px solid var(--line)', borderRadius: 8, padding: '9px 12px' }}>
+                  <div style={{ fontSize: 11, color: 'var(--ink-3)', fontWeight: 600 }}>생성된 내용</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--blue)' }}>
+                    {parsedResult.res.doc.blocks.length}개 블록
+                  </div>
+                </div>
+                <div style={{ background: 'var(--bg-1, #f8fafc)', border: '1px solid var(--line)', borderRadius: 8, padding: '9px 12px' }}>
+                  <div style={{ fontSize: 11, color: 'var(--ink-3)', fontWeight: 600 }}>마크다운 글자수</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink-1)' }}>
+                    {(parsedResult.res.markdown || '').length.toLocaleString()}자
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ borderTop: '1px solid var(--line)', paddingTop: 10, marginTop: 4 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <button
+                    className="btn sm ghost"
+                    onClick={() => setShowPreview(!showPreview)}
+                    style={{ padding: '2px 6px', fontSize: 12.5, color: 'var(--ink-2)', gap: 4 }}
+                  >
+                    {showPreview ? <Ic.Up size={13} /> : <Ic.Down size={13} />}
+                    파싱된 마크다운 내용 {showPreview ? '접기' : '미리보기'}
+                  </button>
+                  {showPreview && (
+                    <button className="btn sm ghost" onClick={copyParsedMd} style={{ gap: 4 }}>
+                      <Ic.Copy size={13} /> {copiedMd ? '복사됨!' : '전체 복사'}
+                    </button>
+                  )}
+                </div>
+
+                {showPreview && (
+                  <div className="md-preview">
+                    {parsedResult.res.markdown || '(마크다운 내용 없음)'}
+                  </div>
+                )}
+              </div>
+
+              {downloadedMd && (
+                <div style={{ marginTop: 10, padding: '8px 12px', background: '#ecfdf3', border: '1px solid #a6f4c5', borderRadius: 8, color: '#027a48', fontSize: 12.5, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Ic.Check size={14} /> <b>MD 파일 다운로드 완료!</b> 나중에 새 변환 화면에 이 파일을 올리면 즉시 바로 HWPX가 생성됩니다.
+                </div>
+              )}
+            </div>
+            <div className="modal-f" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+              <button className="btn ghost" onClick={() => setParsedResult(null)}>
+                취소
+              </button>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="btn" onClick={downloadParsedMd} style={{ fontWeight: 600 }}>
+                  <Ic.Download size={15} /> {downloadedMd ? 'MD 파일 다시 받기' : 'MD 파일 다운로드 (.md)'}
+                </button>
+                <button
+                  className="btn primary"
+                  onClick={() => proceedCreate(parsedResult.res, parsedResult.templateId, parsedResult.sourceName)}
+                >
+                  <Ic.Sparkle size={15} /> 바로 학습자료(HWPX) 생성 →
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

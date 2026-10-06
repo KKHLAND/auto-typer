@@ -1,5 +1,5 @@
 // 변환 파이프라인: 올린 파일·붙여넣은 글 → 학습자료 문서
-import { assemble, importJson, newDoc } from '../model.js';
+import { assemble, importJson, newDoc, docToMarkdown } from '../model.js';
 import { parseText } from '../engine/textParser.js';
 import { formatPuaMathLines } from '../engine/hwpPua.js';
 import { hwpxToText, hwpxImages } from '../engine/hwpxReader.js';
@@ -29,6 +29,7 @@ export function fileKind(name) {
 export async function convert({ files = [], text = '', settings, title, onProgress = () => {}, signal }) {
   const blocks = [];
   const pages = [];
+  const markdowns = [];
   const hasKey = !!settings.apiKey;
   const engine = settings.engine || 'auto';
   const useAiForImages = engine !== 'rules' && hasKey;
@@ -101,16 +102,30 @@ export async function convert({ files = [], text = '', settings, title, onProgre
       onProgress({ stage: 'render', status: 'running', message: `${file.name} 읽는 중 (kordoc)` });
       if (engineUsed !== 'ai') engineUsed = 'kordoc';
       const kd = await kordocParse(await file.arrayBuffer(), file.name);
+      if (kd?.markdown) markdowns.push(kd.markdown);
       await textToBlocks(kd.markdown, kd.images);
       continue;
     }
     if (kind === 'hwpx') {
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      await textToBlocks(hwpxToText(bytes), hwpxImages(bytes));
+      onProgress({ stage: 'render', status: 'running', message: `${file.name} 읽는 중 (kordoc)` });
+      try {
+        const kd = await kordocParse(await file.arrayBuffer(), file.name);
+        if (engineUsed !== 'ai') engineUsed = 'kordoc';
+        if (kd?.markdown) markdowns.push(kd.markdown);
+        await textToBlocks(kd.markdown, kd.images);
+      } catch (e) {
+        console.warn('kordoc hwpx 실패 — 내장 hwpx 리더로 대체', e);
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        const t = hwpxToText(bytes);
+        if (t) markdowns.push(t);
+        await textToBlocks(t, hwpxImages(bytes));
+      }
       continue;
     }
     if (kind === 'text') {
-      await textToBlocks(await file.text());
+      const txt = await file.text();
+      if (txt) markdowns.push(txt);
+      await textToBlocks(txt);
       continue;
     }
     if (kind === 'image') {
@@ -183,31 +198,37 @@ export async function convert({ files = [], text = '', settings, title, onProgre
       onProgress({
         stage: 'render',
         status: 'running',
-        message: isMathOrExam ? '수식 텍스트 파서로 정리 중' : `${file.name} 텍스트 파싱 중 (빠른 파서)`,
+        message: `${file.name} 빠른 파싱 중 (kordoc 엔진)`,
       });
       let kd = null;
-      if (!isMathOrExam) {
-        try {
-          onProgress({ stage: 'render', status: 'running', message: `${file.name} 구조 읽는 중 (kordoc)` });
-          kd = await kordocParse(await file.arrayBuffer(), file.name);
-          if (engineUsed !== 'ai') engineUsed = 'kordoc';
-        } catch (e) {
-          console.warn('kordoc 실패 — 쪽 글자층으로 대신 읽음', e);
-        }
+      try {
+        onProgress({ stage: 'render', status: 'running', message: `${file.name} 구조 읽는 중 (kordoc)` });
+        kd = await kordocParse(await file.arrayBuffer(), file.name);
+        if (engineUsed !== 'ai') engineUsed = 'kordoc';
+      } catch (e) {
+        console.warn('kordoc 실패 — 쪽 글자층으로 대신 읽음', e);
       }
       if (kd?.markdown?.trim()) {
-        blocks.push(...(await withFigures(parseText(kd.markdown), kd.images)));
+        const mdText = isMathOrExam ? formatPuaMathLines(kd.markdown) : kd.markdown;
+        markdowns.push(mdText);
+        blocks.push(...(await withFigures(parseText(mdText), kd.images)));
       } else {
         const base = pages.length - local.length;
+        const pageMds = [];
         texts.forEach((t, i) => {
           const formatted = isMathOrExam ? formatPuaMathLines(t) : t;
+          pageMds.push(formatted);
           for (const b of parseText(formatted)) blocks.push({ ...b, page: base + i });
         });
+        if (pageMds.length) markdowns.push(pageMds.join('\n\n'));
       }
     }
   }
 
-  if (text.trim()) await textToBlocks(text);
+  if (text.trim()) {
+    markdowns.push(text);
+    await textToBlocks(text);
+  }
 
   async function textToBlocks(t, images = []) {
     if (engine === 'ai' && hasKey) {
@@ -227,8 +248,9 @@ export async function convert({ files = [], text = '', settings, title, onProgre
   const doc = docFromJson ?? newDoc(title || '새 학습자료');
   if (!docFromJson || blocks.length) doc.blocks = [...(docFromJson?.blocks ?? []), ...assemble(blocks)];
   if (title) doc.title = title;
+  const rawMarkdown = markdowns.filter(Boolean).join('\n\n---\n\n') || docToMarkdown(doc);
   onProgress({ stage: 'done', message: `내용 ${doc.blocks.length}덩이를 정리했습니다` });
-  return { doc, pages, engineUsed };
+  return { doc, pages, engineUsed, markdown: rawMarkdown };
 }
 
 /** kordoc(https://github.com/KKHLAND/kordoc, MIT) 으로 문서 → {마크다운, 그림}. 필요할 때만 불러온다(약 900KB). */
@@ -239,7 +261,18 @@ async function kordocParse(buffer, name) {
     throw e;
   });
   const { parse } = await kordocMod;
-  const r = await parse(buffer instanceof ArrayBuffer ? buffer : buffer.buffer, { images: true });
+  let targetBuf;
+  if (buffer instanceof ArrayBuffer) {
+    targetBuf = buffer;
+  } else if (ArrayBuffer.isView(buffer)) {
+    targetBuf =
+      buffer.byteOffset === 0 && buffer.byteLength === buffer.buffer.byteLength
+        ? buffer.buffer
+        : buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+  } else {
+    targetBuf = buffer;
+  }
+  const r = await parse(targetBuf, { fileName: name, images: true });
   if (!r?.success) {
     const msg = r?.code === 'ENCRYPTED' || /암호|password/i.test(r?.error || '') ? '암호가 걸린 문서입니다. 한글에서 암호를 푼 뒤 올려 주세요.' : r?.error || '읽지 못했습니다';
     throw new Error(`${name}: ${msg}`);

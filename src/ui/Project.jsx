@@ -6,7 +6,7 @@ import { reviewStats, StatusChip } from './Home.jsx';
 import { listTemplates, loadTemplate } from '../services/templates.js';
 import { buildHwpx } from '../engine/hwpx.js';
 import { plain } from '../engine/markup.js';
-import { blockSummary, newBlock, TYPE_LABEL } from '../model.js';
+import { blockSummary, newBlock, TYPE_LABEL, docToMarkdown } from '../model.js';
 
 const FLAG = { todo: ['검토 전', 'gray'], check: ['확인 필요', 'amber'], done: ['검토 완료', 'blue'] };
 
@@ -111,6 +111,14 @@ export default function Project({ record, pages, onSave, onBack, notify }) {
     setTimeout(() => URL.revokeObjectURL(url), 4000);
   };
 
+  const exportMarkdown = () => {
+    const md = rec.markdown || docToMarkdown(doc);
+    const url = URL.createObjectURL(new Blob([md], { type: 'text/markdown;charset=utf-8' }));
+    Object.assign(document.createElement('a'), { href: url, download: fileName('md') }).click();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    notify('마크다운(.md) 파일을 내려받았습니다.');
+  };
+
   const summary = (b) => plain(blockSummary(b)) || '(내용 없음)';
   const tpl = templates.find((t) => t.id === rec.templateId);
   const count = (f) => blocks.filter((x) => (x.flag ?? 'todo') === f).length;
@@ -132,6 +140,7 @@ export default function Project({ record, pages, onSave, onBack, notify }) {
               ))}
             </select>
             <button className="btn" onClick={() => setHeaderOpen(true)} disabled={!entry}>머리글 편집</button>
+            <button className="btn" onClick={exportMarkdown} title="마크다운(.md) 파일 내려받기"><Ic.Doc size={15} /> MD</button>
             <button className="btn" onClick={savePdf} disabled={!entry}><Ic.Printer size={15} /> PDF</button>
             <button className="btn primary" onClick={downloadHwpx} disabled={!entry}><Ic.Download size={15} /> HWPX 내려받기</button>
           </div>
@@ -163,6 +172,7 @@ export default function Project({ record, pages, onSave, onBack, notify }) {
             <button className="pill-btn" onClick={() => addBlock(newBlock('table'))}><Ic.Plus size={13} /> 표</button>
             <span className="sep" />
             <button className="pill-btn" onClick={() => setBlocks(blocks.map((x) => ({ ...x, flag: 'done' })))}><Ic.Check size={13} /> 모두 검토 완료</button>
+            <button className="pill-btn" onClick={exportMarkdown} title="마크다운(.md) 파일 내려받기"><Ic.Doc size={13} /> MD</button>
             <button className="pill-btn" onClick={exportJson}><Ic.Doc size={13} /> JSON</button>
             <span style={{ marginLeft: 'auto', fontSize: 13, color: 'var(--ink-3)' }}>
               {rec.engineUsed === 'ai' ? 'AI 인식' : rec.engineUsed === 'kordoc' ? '문서 변환(kordoc)' : '규칙 인식'} · 자동 저장

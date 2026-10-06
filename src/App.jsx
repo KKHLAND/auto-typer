@@ -38,7 +38,7 @@ export default function App() {
     saveSettings(s);
   };
 
-  const createProject = async ({ doc, pages = [], templateId, sourceName = '', engineUsed = 'rules' }) => {
+  const createProject = async ({ doc, pages = [], templateId, sourceName = '', engineUsed = 'rules', markdown = '' }) => {
     const id = `p${Date.now().toString(36)}`;
     const now = Date.now();
     const rec = {
@@ -52,6 +52,7 @@ export default function App() {
       pageCount: pages.length,
       sourceName,
       engineUsed,
+      markdown,
     };
     await put('projects', rec);
     if (pages.length) await put('pages', { id, pages });

@@ -286,3 +286,48 @@ export function blockSummary(b) {
   if (b.type === 'box') return [b.title, b.text].filter(Boolean).join(' — ');
   return b.text;
 }
+
+/** 학습자료 문서를 마크다운(.md) 텍스트로 변환 */
+export function docToMarkdown(doc) {
+  if (!doc) return '';
+  const parts = [];
+  let hasTitle = false;
+  for (const b of doc.blocks || []) {
+    if (b.type === 'title') {
+      parts.push(`# ${b.text || doc.title || ''}`);
+      hasTitle = true;
+    } else if (b.type === 'heading') {
+      const hashes = '#'.repeat(Math.max(1, Math.min(6, (b.level || 1) + 1)));
+      parts.push(`${hashes} ${b.text || ''}`);
+    } else if (b.type === 'paragraph') {
+      parts.push(b.text || '');
+    } else if (b.type === 'list') {
+      const t = b.text || '';
+      if (/^(\d+[.．]|[①-⑳•\-*]|\([0-9가-힣a-zA-Z]+\))/.test(t)) {
+        parts.push(t);
+      } else {
+        const indent = '  '.repeat(Math.max(0, (b.level || 1) - 1));
+        parts.push(`${indent}- ${t}`);
+      }
+    } else if (b.type === 'box') {
+      const titleLine = b.title ? `> **${b.title}**\n>\n` : '';
+      const body = (b.text || '').split('\n').map((l) => `> ${l}`).join('\n');
+      parts.push((titleLine + body).trim());
+    } else if (b.type === 'table') {
+      if (Array.isArray(b.rows) && b.rows.length) {
+        const h = b.rows[0];
+        const sep = h.map(() => '---');
+        const rows = b.rows.slice(1);
+        const tbl = [`| ${h.join(' | ')} |`, `| ${sep.join(' | ')} |`, ...rows.map((r) => `| ${r.join(' | ')} |`)].join('\n');
+        parts.push(tbl);
+      }
+    } else if (b.type === 'figure') {
+      parts.push(b.text ? `![${b.text}](그림)\n*${b.text}*` : '![그림](그림)');
+    }
+  }
+  let md = parts.filter(Boolean).join('\n\n');
+  if (!hasTitle && doc.title) {
+    md = `# ${doc.title}\n\n${md}`;
+  }
+  return md;
+}
