@@ -271,6 +271,8 @@ export default function Project({ record, pages, onSave, onBack, notify }) {
         <BlockEditor
           block={selBlock}
           pageImage={selBlock.page != null ? pages[selBlock.page]?.dataUrl : null}
+          settings={settings}
+          notify={notify}
           onChange={setBlock}
           onClose={() => setSel(null)}
           onDelete={() => removeBlock(selBlock.id)}

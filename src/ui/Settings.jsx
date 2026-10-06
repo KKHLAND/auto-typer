@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import * as Ic from './icons.jsx';
-import { listModels, DEFAULT_MODEL } from '../services/gemini.js';
+import { listModels, DEFAULT_MODEL, DEFAULT_IMAGE_MODEL, normalizeModelName } from '../services/gemini.js';
 
 export default function Settings({ settings, setSettings, notify, tab: initialTab }) {
   const [tab, setTab] = useState(initialTab === 'help' ? 'help' : 'ai');
@@ -44,7 +44,10 @@ export default function Settings({ settings, setSettings, notify, tab: initialTa
             요청은 이 브라우저에서 Google 로 <b>직접</b> 갑니다. 무료 사용량 안에서는 결제가 일어나지 않습니다.
           </div>
           <div className="kv">
-            <div className="k">Gemini API 키<small>Google 계정만 있으면 1분 안에 무료로 받습니다.</small></div>
+            <div className="k">
+              Gemini 통합 API 키
+              <small>키 하나로 문서·수식 인식 및 이미지 생성에 모두 자동 연동됩니다.</small>
+            </div>
             <div>
               <div className="row-inline">
                 <input className="input" style={{ maxWidth: 380 }} type={show ? 'text' : 'password'} value={key} placeholder="AIza…" onChange={(e) => setKey(e.target.value)} autoComplete="off" />
@@ -55,13 +58,19 @@ export default function Settings({ settings, setSettings, notify, tab: initialTa
               <ol className="hint" style={{ paddingLeft: 18 }}>
                 <li><a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer">Google AI Studio → API 키</a> 에 접속해 로그인</li>
                 <li>‘API 키 만들기’ → 생긴 키를 복사해 위 칸에 붙여 넣기</li>
-                <li>‘확인하고 저장’ — 키는 이 컴퓨터의 브라우저에만 저장됩니다</li>
+                <li>‘확인하고 저장’ — 키는 이 컴퓨터의 브라우저에만 저장되며, <b>문서 인식과 이미지 생성에 자동 공통 적용</b>됩니다</li>
               </ol>
-              {settings.apiKey && <span className="chip green"><Ic.Shield size={12} /> 키가 저장되어 있습니다</span>}
+              {settings.apiKey && (
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6, flexWrap: 'wrap' }}>
+                  <span className="chip green"><Ic.Shield size={12} /> Gemini API 키 등록 완료</span>
+                  <span className="chip solid-blue"><Ic.Check size={12} /> 문서/수식 인식 연동</span>
+                  <span className="chip solid-blue"><Ic.Check size={12} /> 이미지 생성 자동 연동</span>
+                </div>
+              )}
             </div>
           </div>
           <div className="kv">
-            <div className="k">모델<small>최신 Flash 계열이 빠르고 무료 사용량이 넉넉합니다.</small></div>
+            <div className="k">문서·수식 인식 모델<small>최신 Flash 계열이 빠르고 무료 사용량이 넉넉합니다.</small></div>
             <div className="row-inline">
               {models.length ? (
                 <select className="select" style={{ maxWidth: 380 }} value={settings.model} onChange={(e) => setSettings({ ...settings, model: e.target.value })}>
@@ -73,6 +82,35 @@ export default function Settings({ settings, setSettings, notify, tab: initialTa
                   {settings.apiKey && <button className="btn sm" onClick={async () => { try { setModels(await listModels(settings.apiKey)); } catch (e) { notify(e.message, 'err'); } }}>목록 불러오기</button>}
                 </>
               )}
+            </div>
+          </div>
+          <div className="kv">
+            <div className="k">
+              이미지 생성 모델
+              <small>문제에 삽입할 삽화·도형·그래프 생성 시 사용합니다.</small>
+            </div>
+            <div>
+              <div className="row-inline">
+                <input
+                  className="input"
+                  style={{ maxWidth: 320 }}
+                  value={settings.imageModel || DEFAULT_IMAGE_MODEL}
+                  placeholder={DEFAULT_IMAGE_MODEL}
+                  onChange={(e) => setSettings({ ...settings, imageModel: normalizeModelName(e.target.value) })}
+                />
+                <span className="chip blue">기본 모델: {DEFAULT_IMAGE_MODEL}</span>
+              </div>
+              <div className="hint" style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                {settings.apiKey ? (
+                  <span style={{ color: 'var(--blue)', fontWeight: 600 }}>
+                    <Ic.Check size={13} style={{ verticalAlign: -2 }} /> 등록된 Gemini API 키에 자동 연동되어 작동합니다 (별도 키 불필요).
+                  </span>
+                ) : (
+                  <span style={{ color: 'var(--ink-3)' }}>
+                    위 'Gemini API 키'를 등록하면 이미지 생성 기능에도 자동으로 함께 연동됩니다.
+                  </span>
+                )}
+              </div>
             </div>
           </div>
           <div className="kv">

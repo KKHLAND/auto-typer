@@ -45,6 +45,32 @@ export async function pageText(pdf, n) {
   const vp = page.getViewport({ scale: 1 });
   const tc = await page.getTextContent();
   let puaCount = 0;
+  let hasImage = false;
+  try {
+    const ops = await page.getOperatorList();
+    const imageOps = new Set([
+      pdfjs.OPS.paintImageXObject,
+      pdfjs.OPS.paintInlineImageXObject,
+      pdfjs.OPS.paintImageMaskXObject,
+      pdfjs.OPS.paintSolidColorImageMask,
+    ]);
+    let pathCount = 0;
+    for (let i = 0; i < ops.fnArray.length; i++) {
+      const fn = ops.fnArray[i];
+      if (imageOps.has(fn)) {
+        hasImage = true;
+        break;
+      }
+      if (fn === pdfjs.OPS.constructPath) pathCount++;
+      if (pathCount > 25) {
+        hasImage = true;
+        break;
+      }
+    }
+  } catch {
+    // fallback
+  }
+
   const items = tc.items
     .filter((it) => it.str !== undefined)
     .map((it) => {
@@ -60,7 +86,7 @@ export async function pageText(pdf, n) {
       };
     });
   const chars = items.reduce((n, it) => n + it.s.trim().length, 0);
-  if (!chars) return { text: '', chars: 0, puaCount: 0 };
+  if (!chars) return { text: '', chars: 0, puaCount: 0, hasImage };
 
   // 단 나누기: 가운데 근처에서 글자가 거의 지나가지 않는 세로 띠를 찾는다
   const mid = vp.width / 2;
@@ -105,7 +131,7 @@ export async function pageText(pdf, n) {
     if (prev && !prev.colBreak && !cur.colBreak && cur.y - prev.y > prev.h * 2.1) lines.push('');
     lines.push(cur.s);
   }
-  return { text: lines.join('\n'), chars, puaCount };
+  return { text: lines.join('\n'), chars, puaCount, hasImage };
 }
 
 /**

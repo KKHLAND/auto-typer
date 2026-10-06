@@ -3,6 +3,13 @@ import { fixLatexEscapes } from '../model.js';
 const BASE = 'https://generativelanguage.googleapis.com/v1beta';
 
 export const DEFAULT_MODEL = 'gemini-flash-latest';
+export const DEFAULT_IMAGE_MODEL = 'gemini-3.1-flash-lite-image';
+
+/** 모델명 오타 교정 (예: falsh -> flash) */
+export function normalizeModelName(m) {
+  if (!m) return m;
+  return String(m).replace(/falsh/g, 'flash');
+}
 
 /** 키로 쓸 수 있는 모델 목록 (이미지 입력 가능한 gemini 계열) */
 export async function listModels(key) {
@@ -214,4 +221,25 @@ export async function testKey(key) {
   const models = await listModels(key);
   if (!models.length) throw new Error('쓸 수 있는 Gemini 모델이 없습니다');
   return models;
+}
+
+/** AI 로 그림·삽화·도형 이미지 생성 (기본: gemini-3.1-flash-lite-image) */
+export async function generateFigureImage({ key, prompt, imageModel = DEFAULT_IMAGE_MODEL, signal }) {
+  const model = normalizeModelName(imageModel) || DEFAULT_IMAGE_MODEL;
+  const r = await fetch(`${BASE}/models/${model}:generateContent`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+    body: JSON.stringify({
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    }),
+    signal,
+  });
+  if (!r.ok) throw new Error(await errText(r));
+  const j = await r.json();
+  for (const part of j.candidates?.[0]?.content?.parts || []) {
+    if (part.inlineData?.data) {
+      return `data:${part.inlineData.mimeType || 'image/png'};base64,${part.inlineData.data}`;
+    }
+  }
+  throw new Error('생성된 이미지 데이터를 찾을 수 없습니다.');
 }

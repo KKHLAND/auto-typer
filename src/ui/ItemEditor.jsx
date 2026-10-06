@@ -1,7 +1,8 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import * as Ic from './icons.jsx';
 import { TYPE_LABEL } from '../model.js';
 import { clearGuesses, hasGuess, inlineHtml, paragraphs } from '../engine/markup.js';
+import { generateFigureImage, DEFAULT_IMAGE_MODEL } from '../services/gemini.js';
 
 const FLAGS = [
   ['todo', '검토 전', 'gray'],
@@ -51,8 +52,11 @@ function MarkBar({ wrap }) {
 
 const rowsOf = (n) => ({ rows: Math.max(2, Math.min(16, n)) });
 
-export default function BlockEditor({ block: b, pageImage, onChange, onClose, onDelete, onMove }) {
+export default function BlockEditor({ block: b, pageImage, settings, notify, onChange, onClose, onDelete, onMove }) {
   const { bind, wrap } = useMarkup();
+  const [generating, setGenerating] = useState(false);
+  const [genPrompt, setGenPrompt] = useState('');
+  const [showGen, setShowGen] = useState(false);
   if (!b) return null;
   const set = (patch) => onChange({ ...b, ...patch });
   const textArea = (key, label) => {
@@ -177,27 +181,106 @@ export default function BlockEditor({ block: b, pageImage, onChange, onClose, on
             <div className="sec-label">그림</div>
             <div className="fig-box">
               {b.figure?.src ? <img src={b.figure.src} alt="" /> : <Ic.Image size={26} />}
-              <label className="btn sm">
-                {b.figure ? '바꾸기' : '그림 넣기'}
-                <input
-                  type="file"
-                  accept="image/png,image/jpeg"
-                  hidden
-                  onChange={async (e) => {
-                    const f = e.target.files[0];
-                    if (!f) return;
-                    const src = await new Promise((r) => {
-                      const fr = new FileReader();
-                      fr.onload = () => r(fr.result);
-                      fr.readAsDataURL(f);
-                    });
-                    const im = new Image();
-                    im.onload = () => set({ figure: { src, w: im.width, h: im.height } });
-                    im.src = src;
-                  }}
-                />
-              </label>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <label className="btn sm">
+                  {b.figure ? '바꾸기' : '그림 넣기'}
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg"
+                    hidden
+                    onChange={async (e) => {
+                      const f = e.target.files[0];
+                      if (!f) return;
+                      const src = await new Promise((r) => {
+                        const fr = new FileReader();
+                        fr.onload = () => r(fr.result);
+                        fr.readAsDataURL(f);
+                      });
+                      const im = new Image();
+                      im.onload = () => set({ figure: { src, w: im.width, h: im.height } });
+                      im.src = src;
+                    }}
+                  />
+                </label>
+                {settings?.apiKey && (
+                  <button
+                    type="button"
+                    className="btn sm"
+                    onClick={() => setShowGen(!showGen)}
+                  >
+                    <Ic.Sparkle size={13} /> {showGen ? '닫기' : 'AI 그림 생성'}
+                  </button>
+                )}
+              </div>
             </div>
+            {showGen && settings?.apiKey && (
+              <div style={{ background: 'var(--bg-3)', padding: 12, borderRadius: 10, marginBottom: 12, border: '1px solid var(--line)' }}>
+                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>
+                  AI 그림 생성 (모델: {settings?.imageModel || DEFAULT_IMAGE_MODEL})
+                </div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <input
+                    className="input sm"
+                    style={{ flex: 1 }}
+                    placeholder="생성할 그림/도형 설명 (예: 직각삼각형 ABC와 외접원)"
+                    value={genPrompt}
+                    onChange={(e) => setGenPrompt(e.target.value)}
+                    onKeyDown={async (e) => {
+                      if (e.key === 'Enter' && genPrompt.trim() && !generating) {
+                        e.preventDefault();
+                        try {
+                          setGenerating(true);
+                          const src = await generateFigureImage({
+                            key: settings.apiKey,
+                            prompt: genPrompt,
+                            imageModel: settings.imageModel || DEFAULT_IMAGE_MODEL,
+                          });
+                          const im = new Image();
+                          im.onload = () => {
+                            set({ figure: { src, w: im.width, h: im.height }, text: b.text || genPrompt });
+                            setShowGen(false);
+                            notify?.('그림이 성공적으로 생성되었습니다.');
+                          };
+                          im.src = src;
+                        } catch (err) {
+                          notify?.(err.message || String(err), 'err');
+                        } finally {
+                          setGenerating(false);
+                        }
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="btn sm primary"
+                    disabled={!genPrompt.trim() || generating}
+                    onClick={async () => {
+                      try {
+                        setGenerating(true);
+                        const src = await generateFigureImage({
+                          key: settings.apiKey,
+                          prompt: genPrompt,
+                          imageModel: settings.imageModel || DEFAULT_IMAGE_MODEL,
+                        });
+                        const im = new Image();
+                        im.onload = () => {
+                          set({ figure: { src, w: im.width, h: im.height }, text: b.text || genPrompt });
+                          setShowGen(false);
+                          notify?.('그림이 성공적으로 생성되었습니다.');
+                        };
+                        im.src = src;
+                      } catch (err) {
+                        notify?.(err.message || String(err), 'err');
+                      } finally {
+                        setGenerating(false);
+                      }
+                    }}
+                  >
+                    {generating ? '생성 중...' : '생성'}
+                  </button>
+                </div>
+              </div>
+            )}
             {textArea('text', '그림 설명 (선택)')}
           </>
         ) : (

@@ -40,14 +40,28 @@ const SKEY = 'auto-typer/settings/v1';
 export function loadSettings() {
   try {
     const raw = JSON.parse(localStorage.getItem(SKEY) || '{}');
-    return { apiKey: '', model: '', handwriting: 'auto', engine: 'auto', ...raw, handwriting: raw.handwriting || 'auto' };
+    const hw = raw.handwriting === 'ignore' ? 'ignore' : (raw.handwritingVersion >= 2 && raw.handwriting === 'include' ? 'include' : 'auto');
+    const migrated = {
+      apiKey: '',
+      model: '',
+      imageModel: 'gemini-3.1-flash-lite-image',
+      engine: 'auto',
+      ...raw,
+      handwriting: hw,
+      handwritingVersion: 2,
+      imageModel: raw.imageModel || 'gemini-3.1-flash-lite-image',
+    };
+    if (raw.handwriting !== hw || raw.handwritingVersion !== 2) {
+      saveSettings(migrated);
+    }
+    return migrated;
   } catch {
-    return { apiKey: '', model: '', handwriting: 'auto', engine: 'auto' };
+    return { apiKey: '', model: '', imageModel: 'gemini-3.1-flash-lite-image', handwriting: 'auto', engine: 'auto', handwritingVersion: 2 };
   }
 }
 export function saveSettings(s) {
   try {
-    localStorage.setItem(SKEY, JSON.stringify(s));
+    localStorage.setItem(SKEY, JSON.stringify({ ...s, handwritingVersion: 2 }));
   } catch {
     /* 사생활 보호 모드 등 */
   }

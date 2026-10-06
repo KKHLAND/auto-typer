@@ -128,6 +128,7 @@ export async function convert({ files = [], text = '', settings, title, onProgre
     const local = [];
     let textChars = 0;
     let totalPua = 0;
+    let pagesWithImages = 0;
     const texts = [];
     for (let n = 1; n <= total; n++) {
       if (signal?.aborted) throw new DOMException('취소됨', 'AbortError');
@@ -139,19 +140,39 @@ export async function convert({ files = [], text = '', settings, title, onProgre
       const t = await pageText(pdf, n);
       textChars += t.chars;
       totalPua += t.puaCount || 0;
+      if (t.hasImage) pagesWithImages++;
       texts.push(t.text);
     }
     pdf.loadingTask?.destroy?.(); // 쪽 그림·글자는 다 뽑았으니 pdf.js 메모리 정리
     const fullText = texts.join(' ');
     const scanned = textChars < total * 80; // 글자층이 거의 없으면 스캔본
+    const hasOriginalImages = pagesWithImages > 0 || scanned;
     // 수학 수식 시험지 판정 (PUA 수식 글꼴이 많거나 시험지 고유 문구 포함)
     const isMathOrExam = totalPua >= 10 || /수학\s*영역|[\[【]\s*[234]\s*점\s*[\]】]|홀수형|짝수형|5지선다형|대학수학능력시험/.test(fullText);
-    const wantAi = engine === 'ai';
-    const autoAi = engine === 'auto' && hasKey && (scanned || isMathOrExam);
 
-    if (wantAi || autoAi || (scanned && hasKey)) {
+    const isAutoHandwriting = (settings.handwriting || 'auto') === 'auto';
+    const wantAi = engine === 'ai';
+
+    // 손글씨 처리 기본값 '자동'일 때:
+    // 원본에 이미지가 있는 경우에만 이미지/AI 처리를 돌리고,
+    // 나머지 텍스트만 있을 때는 로컬 파서를 이용해 빠르고 정확하게 처리한다.
+    let shouldRunAi = false;
+    if (wantAi) {
+      shouldRunAi = true;
+    } else if (engine === 'rules') {
+      shouldRunAi = false;
+    } else if (hasKey) {
+      if (isAutoHandwriting) {
+        // 원본에 이미지가 있는 경우에만 AI 이미지/문서 처리 실행
+        shouldRunAi = hasOriginalImages;
+      } else {
+        shouldRunAi = scanned || isMathOrExam;
+      }
+    }
+
+    if (shouldRunAi) {
       if (!hasKey) {
-        throw new Error('수학 수식 시험지 또는 스캔본 PDF 는 AI 정밀 인식이 필요합니다. 설정에서 무료 Gemini API 키를 넣어 주세요.');
+        throw new Error('원본에 이미지가 포함된 문서는 AI 정밀 인식이 필요합니다. 설정에서 무료 Gemini API 키를 넣어 주세요.');
       }
       engineUsed = 'ai';
       for (let i = 0; i < local.length; i++) {
@@ -159,13 +180,11 @@ export async function convert({ files = [], text = '', settings, title, onProgre
         await aiPage(local[i], i, local.length);
       }
     } else {
-      if (isMathOrExam && !hasKey) {
-        onProgress({
-          stage: 'render',
-          status: 'running',
-          message: '수학 시험지 감지 — 수식 해독 중 (AI 키 등록 시 수식·그래프 100% 추출)',
-        });
-      }
+      onProgress({
+        stage: 'render',
+        status: 'running',
+        message: isMathOrExam ? '수식 텍스트 파서로 정리 중' : `${file.name} 텍스트 파싱 중 (빠른 파서)`,
+      });
       let kd = null;
       if (!isMathOrExam) {
         try {
