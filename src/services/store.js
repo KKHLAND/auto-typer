@@ -40,28 +40,29 @@ const SKEY = 'auto-typer/settings/v1';
 export function loadSettings() {
   try {
     const raw = JSON.parse(localStorage.getItem(SKEY) || '{}');
-    const hw = raw.handwriting === 'ignore' ? 'ignore' : (raw.handwritingVersion >= 2 && raw.handwriting === 'include' ? 'include' : 'auto');
+    const hw = raw.handwritingVersion >= 3 && (raw.handwriting === 'include' || raw.handwriting === 'ignore') ? raw.handwriting : 'auto';
     const migrated = {
       apiKey: '',
       model: '',
       imageModel: 'gemini-3.1-flash-lite-image',
       engine: 'auto',
+      mdAction: 'ask',
       ...raw,
       handwriting: hw,
-      handwritingVersion: 2,
+      handwritingVersion: 3,
       imageModel: raw.imageModel || 'gemini-3.1-flash-lite-image',
     };
-    if (raw.handwriting !== hw || raw.handwritingVersion !== 2) {
+    if (raw.handwriting !== hw || raw.handwritingVersion !== 3) {
       saveSettings(migrated);
     }
     return migrated;
   } catch {
-    return { apiKey: '', model: '', imageModel: 'gemini-3.1-flash-lite-image', handwriting: 'auto', engine: 'auto', handwritingVersion: 2 };
+    return { apiKey: '', model: '', imageModel: 'gemini-3.1-flash-lite-image', handwriting: 'auto', engine: 'auto', mdAction: 'ask', handwritingVersion: 3 };
   }
 }
 export function saveSettings(s) {
   try {
-    localStorage.setItem(SKEY, JSON.stringify({ ...s, handwritingVersion: 2 }));
+    localStorage.setItem(SKEY, JSON.stringify({ ...s, handwritingVersion: 3 }));
   } catch {
     /* 사생활 보호 모드 등 */
   }

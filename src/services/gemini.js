@@ -11,9 +11,77 @@ export function normalizeModelName(m) {
   return String(m).replace(/falsh/g, 'flash');
 }
 
+/**
+ * Gemini API 인증 헤더 생성
+ * - 기본 API 키 ('AIza...') 및 신규 Auth 키 ('AQ....') 모두 지원
+ * - 필요 시 Authorization: Bearer 또는 x-goog-api-key 적응형 전송
+ */
+export function getAuthHeaders(key, asBearer = false) {
+  const k = String(key || '').trim();
+  const headers = {};
+  if (!k) return headers;
+  if (asBearer || k.startsWith('ya29.')) {
+    headers['Authorization'] = `Bearer ${k}`;
+  } else {
+    headers['x-goog-api-key'] = k;
+  }
+  return headers;
+}
+
+/** API 키 형식 유효성 검사 ('AIza...' 및 'AQ....' 키 모두 유효) */
+export function isValidApiKey(key) {
+  const k = String(key || '').trim();
+  if (!k) return false;
+  return k.startsWith('AIza') || k.startsWith('AQ.') || k.startsWith('ya29.') || k.length >= 20;
+}
+
+/**
+ * Gemini API 요청 전송 래퍼
+ * 'AIza...' 및 'AQ....' 키 모두 지원하며 401/403/400 발생 시 Bearer 또는 쿼리 파라미터로 자동 재시도
+ */
+export async function fetchWithAuth(url, { method = 'GET', headers = {}, body, signal } = {}, key) {
+  const k = String(key || '').trim();
+  if (!k) {
+    return fetch(url, { method, headers, body, signal });
+  }
+
+  const isAq = k.startsWith('AQ.');
+
+  // 1. 기본 x-goog-api-key (또는 ya29 Bearer) 헤더로 시도
+  const reqHeaders = {
+    ...headers,
+    ...getAuthHeaders(k, false),
+  };
+  let r = await fetch(url, { method, headers: reqHeaders, body, signal });
+
+  // 2. AQ. 키이거나 401/403/400 실패 시: Bearer 헤더로 2차 시도
+  if (!r.ok && (r.status === 401 || r.status === 403 || (r.status === 400 && isAq))) {
+    const altHeaders = {
+      ...headers,
+      ...getAuthHeaders(k, true),
+    };
+    const rAlt = await fetch(url, { method, headers: altHeaders, body, signal });
+    if (rAlt.ok) {
+      return rAlt;
+    }
+
+    // 3. URL 쿼리 파라미터 ?key= 로 3차 시도
+    const sep = url.includes('?') ? '&' : '?';
+    const urlWithKey = `${url}${sep}key=${encodeURIComponent(k)}`;
+    const rParam = await fetch(urlWithKey, { method, headers, body, signal });
+    if (rParam.ok) {
+      return rParam;
+    }
+
+    return rAlt.status < 500 ? rAlt : r;
+  }
+
+  return r;
+}
+
 /** 키로 쓸 수 있는 모델 목록 (이미지 입력 가능한 gemini 계열) */
 export async function listModels(key) {
-  const r = await fetch(`${BASE}/models?pageSize=200`, { headers: { 'x-goog-api-key': key } });
+  const r = await fetchWithAuth(`${BASE}/models?pageSize=200`, {}, key);
   if (!r.ok) throw new Error(await errText(r));
   const j = await r.json();
   return (j.models || [])
@@ -142,12 +210,16 @@ async function call(key, model, parts, signal, onRetry) {
     generationConfig: { temperature: 0, responseMimeType: 'application/json', responseSchema: BLOCK_SCHEMA },
   };
   for (let attempt = 0; ; attempt++) {
-    const r = await fetch(`${BASE}/models/${model}:generateContent`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-      body: JSON.stringify(body),
-      signal,
-    });
+    const r = await fetchWithAuth(
+      `${BASE}/models/${model}:generateContent`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal,
+      },
+      key,
+    );
     if (r.ok) {
       const j = await r.json();
       const text = (j.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('');
@@ -201,39 +273,75 @@ box_2d=[ymin, xmin, ymax, xmax] 를 이 이미지 기준 0~1000 으로 답하라
 /** 그림 둘레를 넉넉히 자른 이미지 → 그림만 담는 상자 [ymin,xmin,ymax,xmax] (0~1000, 그 이미지 기준) */
 export async function refineFigureBox({ key, model, dataUrl, signal }) {
   const [, mime, data] = /^data:([^;]+);base64,(.*)$/.exec(dataUrl);
-  const r = await fetch(`${BASE}/models/${model || DEFAULT_MODEL}:generateContent`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-    body: JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text: BOX_RULES }, { inline_data: { mime_type: mime, data } }] }],
-      generationConfig: { temperature: 0, responseMimeType: 'application/json', responseSchema: BOX_SCHEMA },
-    }),
-    signal,
-  });
+  const r = await fetchWithAuth(
+    `${BASE}/models/${model || DEFAULT_MODEL}:generateContent`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: BOX_RULES }, { inline_data: { mime_type: mime, data } }] }],
+        generationConfig: { temperature: 0, responseMimeType: 'application/json', responseSchema: BOX_SCHEMA },
+      }),
+      signal,
+    },
+    key,
+  );
   if (!r.ok) throw new Error(await errText(r));
   const j = await r.json();
   const box = JSON.parse((j.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('') || '{}').box_2d;
   return Array.isArray(box) && box.length === 4 && box[2] > box[0] && box[3] > box[1] ? box : null;
 }
 
-/** 키 확인용 아주 작은 호출 */
+/** 키 확인용 호출 (AIza 및 AQ 키 모두 검증) */
 export async function testKey(key) {
-  const models = await listModels(key);
-  if (!models.length) throw new Error('쓸 수 있는 Gemini 모델이 없습니다');
-  return models;
+  const k = String(key || '').trim();
+  if (!k) throw new Error('API 키를 입력해 주세요.');
+
+  try {
+    const models = await listModels(k);
+    if (models && models.length) return models;
+  } catch (e) {
+    // models.list 권한이 없거나 제한된 키('AIza...', 'AQ....' 등)의 경우 기본 모델 generateContent 직접 ping 테스트
+    try {
+      const ping = await fetchWithAuth(
+        `${BASE}/models/${DEFAULT_MODEL}:generateContent`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents: [{ parts: [{ text: '1+1=' }] }] }),
+        },
+        k,
+      );
+      if (ping.ok) {
+        return [
+          { id: DEFAULT_MODEL, label: 'Gemini Flash (기본)' },
+          { id: DEFAULT_IMAGE_MODEL, label: 'Gemini Flash Lite Image (이미지 생성)' },
+        ];
+      }
+      const err = await errText(ping);
+      throw new Error(err || e.message);
+    } catch (pingErr) {
+      throw new Error(pingErr.message || e.message);
+    }
+  }
+  return [{ id: DEFAULT_MODEL, label: 'Gemini Flash (기본)' }];
 }
 
 /** AI 로 그림·삽화·도형 이미지 생성 (기본: gemini-3.1-flash-lite-image) */
 export async function generateFigureImage({ key, prompt, imageModel = DEFAULT_IMAGE_MODEL, signal }) {
   const model = normalizeModelName(imageModel) || DEFAULT_IMAGE_MODEL;
-  const r = await fetch(`${BASE}/models/${model}:generateContent`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-    body: JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    }),
-    signal,
-  });
+  const r = await fetchWithAuth(
+    `${BASE}/models/${model}:generateContent`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      }),
+      signal,
+    },
+    key,
+  );
   if (!r.ok) throw new Error(await errText(r));
   const j = await r.json();
   for (const part of j.candidates?.[0]?.content?.parts || []) {

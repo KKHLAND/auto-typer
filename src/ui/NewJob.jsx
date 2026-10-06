@@ -21,6 +21,12 @@ export default function NewJob({ settings, onCancel, onDone, onSettings, notify 
   const [engine, setEngine] = useState(settings.engine || 'auto');
   const [handwriting, setHandwriting] = useState(settings.handwriting || 'auto');
   const [mdAction, setMdAction] = useState(settings.mdAction || 'ask');
+
+  useEffect(() => {
+    if (settings.handwriting) {
+      setHandwriting(settings.handwriting);
+    }
+  }, [settings.handwriting]);
   const [drag, setDrag] = useState(false);
   const [running, setRunning] = useState(false);
   const [log, setLog] = useState([]);
@@ -302,7 +308,7 @@ export default function NewJob({ settings, onCancel, onDone, onSettings, notify 
               <span className="lab">손글씨 처리</span>
               <div className="seg">
                 {[
-                  ['auto', '자동'],
+                  ['auto', '자동 (기본)'],
                   ['include', '손글씨 포함'],
                   ['ignore', '인쇄 내용만'],
                 ].map(([k, l]) => (

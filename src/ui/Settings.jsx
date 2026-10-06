@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import * as Ic from './icons.jsx';
-import { listModels, DEFAULT_MODEL, DEFAULT_IMAGE_MODEL, normalizeModelName } from '../services/gemini.js';
+import { testKey, listModels, DEFAULT_MODEL, DEFAULT_IMAGE_MODEL, normalizeModelName } from '../services/gemini.js';
 
 export default function Settings({ settings, setSettings, notify, tab: initialTab }) {
   const [tab, setTab] = useState(initialTab === 'help' ? 'help' : 'ai');
@@ -13,11 +13,12 @@ export default function Settings({ settings, setSettings, notify, tab: initialTa
   const check = async () => {
     setChecking(true);
     try {
-      const m = await listModels(key.trim());
+      const m = await testKey(key.trim());
       setModels(m);
       const model = settings.model && m.some((x) => x.id === settings.model) ? settings.model : m[0]?.id || DEFAULT_MODEL;
       setSettings({ ...settings, apiKey: key.trim(), model });
-      notify(`키가 확인됐습니다. 모델 ${m.length}개를 쓸 수 있어요.`);
+      const prefix = key.trim().startsWith('AQ.') ? 'AQ' : key.trim().startsWith('AIza') ? 'AIza' : 'API';
+      notify(`${prefix} 키가 정상 확인되었습니다. (${m[0]?.label || m[0]?.id || 'Gemini'} 사용 가능)`);
     } catch (e) {
       notify(`키 확인 실패: ${e.message}`, 'err');
     }
@@ -46,23 +47,23 @@ export default function Settings({ settings, setSettings, notify, tab: initialTa
           <div className="kv">
             <div className="k">
               Gemini 통합 API 키
-              <small>키 하나로 문서·수식 인식 및 이미지 생성에 모두 자동 연동됩니다.</small>
+              <small>‘AIza…’ 또는 ‘AQ.…’ 키 하나로 문서·수식 인식 및 이미지 생성에 모두 자동 연동됩니다.</small>
             </div>
             <div>
               <div className="row-inline">
-                <input className="input" style={{ maxWidth: 380 }} type={show ? 'text' : 'password'} value={key} placeholder="AIza…" onChange={(e) => setKey(e.target.value)} autoComplete="off" />
+                <input className="input" style={{ maxWidth: 380 }} type={show ? 'text' : 'password'} value={key} placeholder="AIza… 또는 AQ.…" onChange={(e) => setKey(e.target.value)} autoComplete="off" />
                 <button className="btn sm ghost" onClick={() => setShow(!show)}>{show ? '숨기기' : '보기'}</button>
                 <button className="btn primary sm" onClick={check} disabled={!key.trim() || checking}>{checking ? '확인 중…' : '확인하고 저장'}</button>
                 {settings.apiKey && <button className="btn sm danger" onClick={() => { setKey(''); setSettings({ ...settings, apiKey: '' }); notify('키를 지웠습니다.'); }}>지우기</button>}
               </div>
               <ol className="hint" style={{ paddingLeft: 18 }}>
                 <li><a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer">Google AI Studio → API 키</a> 에 접속해 로그인</li>
-                <li>‘API 키 만들기’ → 생긴 키를 복사해 위 칸에 붙여 넣기</li>
+                <li>‘API 키 만들기’ → 생성된 키(‘AIza…’ 또는 ‘AQ.…’ 로 시작)를 복사해 위 칸에 붙여넣기</li>
                 <li>‘확인하고 저장’ — 키는 이 컴퓨터의 브라우저에만 저장되며, <b>문서 인식과 이미지 생성에 자동 공통 적용</b>됩니다</li>
               </ol>
               {settings.apiKey && (
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6, flexWrap: 'wrap' }}>
-                  <span className="chip green"><Ic.Shield size={12} /> Gemini API 키 등록 완료</span>
+                  <span className="chip green"><Ic.Shield size={12} /> Gemini API 키 등록 완료 ({settings.apiKey.startsWith('AQ.') ? 'AQ…' : settings.apiKey.startsWith('AIza') ? 'AIza…' : '연동됨'})</span>
                   <span className="chip solid-blue"><Ic.Check size={12} /> 문서/수식 인식 연동</span>
                   <span className="chip solid-blue"><Ic.Check size={12} /> 이미지 생성 자동 연동</span>
                 </div>
@@ -122,10 +123,10 @@ export default function Settings({ settings, setSettings, notify, tab: initialTa
             </div>
           </div>
           <div className="kv">
-            <div className="k">손글씨 처리 기본값<small>시험지 위 낙서는 걸러내고 판서·필기·서술형 답안은 살립니다.</small></div>
+            <div className="k">손글씨 처리 기본값<small>기본값: ‘자동’. 시험지 위 낙서는 걸러내고 판서·필기·서술형 답안은 살립니다.</small></div>
             <div className="seg">
               {[
-                ['auto', '자동'],
+                ['auto', '자동 (기본)'],
                 ['include', '손글씨 포함'],
                 ['ignore', '인쇄 내용만'],
               ].map(([k, l]) => (
