@@ -104,9 +104,9 @@ export default function App() {
                 <path d="M19 22h18M19 28h18M19 34h12" stroke="#0b86f3" strokeWidth="3.2" strokeLinecap="round" fill="none" />
               </svg>
               <h1>Auto-typer</h1>
-              <span className="mh-badge">에듀테크 표준 양식</span>
+              <span className="mh-badge">에듀테크 기술 활용</span>
             </div>
-            <p>스캔본·사진·손글씨·PDF 학습자료를 원하는 학교 양식의 HWPX·PDF로 즉시 변환</p>
+            <p>스캔본·사진·손글씨·PDF 학습자료를 원하는 양식의 HWPX·PDF로 즉시 변환</p>
           </button>
         </div>
         <div className="mh-right">
