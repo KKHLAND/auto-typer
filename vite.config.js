@@ -26,9 +26,11 @@ const cspPlugin = {
   },
 };
 
+// 기본은 이 컴퓨터 전용(127.0.0.1:5180). 바깥에 열어야 하는 호스팅 환경(Google AI Studio 등)에서는
+// HOST=0.0.0.0 PORT=3000 처럼 환경 변수로 바꾼다.
 const serverConfig = {
-  host: '0.0.0.0',
-  port: 3000,
+  host: process.env.HOST || '127.0.0.1',
+  port: Number(process.env.PORT) || 5180,
   strictPort: true,
 };
 

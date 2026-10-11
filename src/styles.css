@@ -601,3 +601,28 @@ mark.guess { background: #ffe58a; color: inherit; border-radius: 2px; box-shadow
 
 /* 문항과 문항 사이 한 줄 (hwpx 의 빈 문단과 같은 높이) */
 .page .u-q { margin-top: calc(var(--body-size, 10pt) * var(--body-line, 1.6)); }
+
+/* 채움 양식 */
+.slot-row { display: grid; grid-template-columns: 22px auto 1fr; align-items: center; gap: 8px; margin-bottom: 6px; }
+.slot-row input[type='checkbox'] { width: 17px; height: 17px; }
+.form-paper { background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.15); margin: 0 auto 18px; padding: 48px 56px; width: 794px; max-width: 100%; font-family: 'Noto Serif KR', serif; font-size: 14px; line-height: 1.7; color: #111; }
+.form-paper .rec-h { font-family: Pretendard, sans-serif; font-size: 12px; color: var(--ink-3); margin: -30px 0 14px; }
+.form-paper p { margin: 0; min-height: 1.7em; white-space: pre-wrap; }
+.form-paper p.c { text-align: center; }
+.form-paper p.u { text-decoration: underline; }
+.form-paper table { border-collapse: collapse; margin: 4px auto; }
+.form-paper td { border: 1px solid #333; padding: 4px 8px; vertical-align: top; }
+.form-paper .val { color: #1f4fd8; cursor: pointer; border-radius: 3px; }
+.form-paper .val:hover { background: var(--blue-50); }
+.form-paper .val mark { background: #fff1a8; }
+.form-paper .empty-val { color: #b6bcc6; font-family: Pretendard, sans-serif; font-size: 12px; }
+@media print {
+  body * { visibility: hidden; }
+  .form-print, .form-print * { visibility: visible; }
+  .form-print { position: absolute; left: 0; top: 0; }
+  .form-print .form-paper { box-shadow: none; margin: 0; page-break-after: always; }
+  .form-print .rec-h { display: none; }
+  .form-print .val { color: #111; }
+  .form-print .val mark { background: none; }
+}
+.fill-box { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--blue-50); background: #f7faff; border-radius: 10px; }

@@ -90,7 +90,7 @@ export default function BlockEditor({ block: b, pageImage, settings, notify, onC
   return (
     <aside className="panel" aria-label="내용 편집">
       <div className="panel-h">
-        <span className="chip blue">{TYPE_LABEL[b.type] || '문단'}</span>
+        <span className="chip blue">{b.label ? `학생 ${(b.rec ?? 0) + 1} · ${b.label.slice(0, 24)}` : TYPE_LABEL[b.type] || '문단'}</span>
         <div className="grow" />
         <button className="icon-btn" aria-label="위로" title="위로" onClick={() => onMove(-1)}><Ic.Up size={16} /></button>
         <button className="icon-btn" aria-label="아래로" title="아래로" onClick={() => onMove(1)}><Ic.Down size={16} /></button>
@@ -111,14 +111,14 @@ export default function BlockEditor({ block: b, pageImage, settings, notify, onC
               ))}
             </div>
           </div>
-          <div className="prop">
+          {!b.label && <div className="prop">
             <label className="k" htmlFor="f-type">종류</label>
             <select id="f-type" className="select" value={b.type} onChange={(e) => changeType(e.target.value)}>
               {Object.entries(TYPE_LABEL).map(([k, l]) => (
                 <option key={k} value={k}>{l}</option>
               ))}
             </select>
-          </div>
+          </div>}
           {(b.type === 'heading' || b.type === 'list') && (
             <div className="prop">
               <span className="k">{b.type === 'heading' ? '단계' : '들여쓰기'}</span>

@@ -3,7 +3,7 @@ chcp 65001 > nul
 title auto-typer
 cd /d "%~dp0"
 
-where node > /dev/null 2>&1
+where node > nul 2>&1
 if errorlevel 1 (
   echo Node.js 가 필요합니다. https://nodejs.org 에서 LTS 버전을 설치한 뒤 다시 실행하세요.
   pause

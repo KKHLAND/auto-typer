@@ -1,6 +1,7 @@
 // 양식 목록: 내장 샘플(A4 2단) + 선생님이 올린 양식
 import { loadHwpx, stripToTemplate, collectHeaderTexts, savePackage } from '../engine/hwpx.js';
-import { all, put, del } from './store.js';
+import { detectSlots, formOutline } from '../engine/form.js';
+import { all, get, put, del } from './store.js';
 
 export const BUILTIN = [
   {
@@ -40,6 +41,11 @@ export async function loadTemplate(id) {
     if (!t) return loadTemplate('sample');
     const pkg = loadHwpx(t.bytes);
     entry = { meta: t.meta, pkg, analysis: t.analysis, headerTexts: collectHeaderTexts(pkg) };
+    // 채움 양식: 올린 양식 원본 그대로 + 채울 칸
+    if (t.formBytes && t.slots?.length) {
+      const fpkg = loadHwpx(t.formBytes);
+      entry.form = { pkg: fpkg, slots: t.slots, outline: formOutline(fpkg, t.slots.filter((x) => !x.off)) };
+    }
   }
   // 머리 문구에 이름 붙이기
   entry.headerTexts = entry.headerTexts.map((h, i) => ({ ...h, label: entry.meta.labels?.[i] || (h.field ? `${h.field} (필드)` : '') }));
@@ -54,23 +60,41 @@ export async function listTemplates() {
 
 /** 선생님이 올린 hwpx 시험지 → 양식으로 등록 (본문을 학습한 뒤 걷어내 가볍게 보관) */
 export async function addCustomTemplate(file) {
-  const src = loadHwpx(new Uint8Array(await file.arrayBuffer()));
-  const { bytes, analysis } = stripToTemplate(src);
+  const formBytes = new Uint8Array(await file.arrayBuffer());
+  // 빈 칸(학번·이름·답 칸·답 줄·누름틀)을 찾는다 — 있으면 '채움 양식'으로도 쓸 수 있다
+  let slots = [];
+  try {
+    slots = detectSlots(loadHwpx(formBytes));
+  } catch (e) {
+    console.warn('칸 찾기 실패', e);
+  }
+  const { bytes, analysis } = stripToTemplate(loadHwpx(formBytes));
   const g = analysis.geometry;
   const mm = (v) => Math.round(v / 283.465);
   const id = `custom-${Date.now().toString(36)}`;
   const meta = {
     id,
     name: file.name.replace(/\.hwpx$/i, ''),
-    desc: `${mm(g.width)}×${mm(g.height)}mm · ${g.cols}단 · 직접 올린 양식`,
+    desc: slots.length
+      ? `채움 양식 · 칸 ${slots.length}개 · ${mm(g.width)}×${mm(g.height)}mm`
+      : `${mm(g.width)}×${mm(g.height)}mm · ${g.cols}단 · 직접 올린 양식`,
+    fill: slots.length > 0,
     paper: `${mm(g.width)}x${mm(g.height)}`,
     theme: 'generic',
     color: '#0ea5a4',
     custom: true,
     labels: [],
   };
-  await put('templates', { id, meta, bytes, analysis, createdAt: Date.now() });
-  return { meta, analysis };
+  await put('templates', { id, meta, bytes, analysis, createdAt: Date.now(), ...(slots.length ? { formBytes, slots } : {}) });
+  return { meta, analysis, slots };
+}
+
+/** 채움 양식의 칸 이름·켜고 끄기 저장 */
+export async function saveTemplateSlots(id, slots) {
+  const t = await get('templates', id);
+  if (!t) return;
+  await put('templates', { ...t, slots });
+  cache.delete(id);
 }
 
 export async function removeCustomTemplate(id) {

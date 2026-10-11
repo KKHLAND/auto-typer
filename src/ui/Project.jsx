@@ -5,18 +5,22 @@ import Preview, { printDoc, headerStrings, effectiveEdits } from './Preview.jsx'
 import { reviewStats, StatusChip } from './Home.jsx';
 import { listTemplates, loadTemplate } from '../services/templates.js';
 import { buildHwpx } from '../engine/hwpx.js';
+import { buildFilledHwpx } from '../engine/form.js';
+import FormPreview from './FormPreview.jsx';
+import { createRoot } from 'react-dom/client';
 import { plain } from '../engine/markup.js';
 import { blockSummary, newBlock, TYPE_LABEL, docToMarkdown } from '../model.js';
 
 const FLAG = { todo: ['검토 전', 'gray'], check: ['확인 필요', 'amber'], done: ['검토 완료', 'blue'] };
 
 export function typeChip(b) {
+  if (b.label) return <span className={`chip ${b.slot ? 'blue' : 'amber'}`}>{b.slot ? '칸' : '칸 밖'}</span>;
   const label = b.type === 'heading' ? `소제목 ${b.level || 1}` : b.type === 'list' && (b.level || 1) > 1 ? `목록 ${b.level}` : TYPE_LABEL[b.type] || '문단';
   const tone = b.type === 'title' || b.type === 'heading' ? 'blue' : b.type === 'box' || b.type === 'table' || b.type === 'figure' ? 'green' : 'gray';
   return <span className={`chip ${tone}`}>{label}</span>;
 }
 
-export default function Project({ record, pages, onSave, onBack, notify }) {
+export default function Project({ record, pages, onSave, onBack, notify, settings }) {
   const [rec, setRec] = useState(record);
   const [tab, setTab] = useState('list');
   const [sel, setSel] = useState(null);
@@ -30,6 +34,8 @@ export default function Project({ record, pages, onSave, onBack, notify }) {
   const pending = useRef(null); // 아직 저장하지 않은 최신 기록
   const doc = rec.doc;
   const blocks = doc.blocks || [];
+  // 채움 양식 작업: 학생(기록)마다 양식 칸에 채운 값
+  const fillMode = !!doc.fill && !!entry?.form;
 
   useEffect(() => {
     listTemplates().then(setTemplates);
@@ -89,7 +95,11 @@ export default function Project({ record, pages, onSave, onBack, notify }) {
   const downloadHwpx = async () => {
     try {
       const e = entry ?? (await loadTemplate(rec.templateId));
-      const bytes = buildHwpx(e.pkg, doc, { analysis: e.analysis, headerEdits: effectiveEdits(e, doc) });
+      let bytes;
+      if (doc.fill) {
+        if (!e.form) throw new Error('채움 양식을 찾지 못했습니다 (양식이 지워졌나요?)');
+        bytes = buildFilledHwpx(e.form.pkg, e.form.slots.filter((x) => !x.off), fillRecords(doc), { title: doc.title });
+      } else bytes = buildHwpx(e.pkg, doc, { analysis: e.analysis, headerEdits: effectiveEdits(e, doc) });
       const url = URL.createObjectURL(new Blob([bytes], { type: 'application/hwp+zip' }));
       Object.assign(document.createElement('a'), { href: url, download: fileName('hwpx') }).click();
       setTimeout(() => URL.revokeObjectURL(url), 4000);
@@ -102,6 +112,7 @@ export default function Project({ record, pages, onSave, onBack, notify }) {
   const savePdf = async () => {
     if (!entry) return;
     notify('인쇄 창에서 ‘PDF로 저장’을 고르세요.');
+    if (fillMode) return printForm(doc, entry);
     await printDoc(doc, entry);
   };
 
@@ -119,7 +130,7 @@ export default function Project({ record, pages, onSave, onBack, notify }) {
     notify('마크다운(.md) 파일을 내려받았습니다.');
   };
 
-  const summary = (b) => plain(blockSummary(b)) || '(내용 없음)';
+  const summary = (b) => (b.label ? `[학생 ${(b.rec ?? 0) + 1} · ${b.label}] ` : '') + (plain(blockSummary(b)) || '(비어 있음)');
   const tpl = templates.find((t) => t.id === rec.templateId);
   const count = (f) => blocks.filter((x) => (x.flag ?? 'todo') === f).length;
 
@@ -134,12 +145,16 @@ export default function Project({ record, pages, onSave, onBack, notify }) {
           <input className="title-input" aria-label="학습자료 이름" value={doc.title} onChange={(e) => update({ ...doc, title: e.target.value })} size={Math.max(8, doc.title.length + 2)} />
           <StatusChip stats={stats} />
           <div className="acts">
+            {doc.fill ? (
+              <span className="chip blue" style={{ height: 30, fontSize: 13 }}>채움 양식: {tpl?.name ?? '(지워진 양식)'} · 학생 {doc.fill.records ?? ''}명</span>
+            ) : (
             <select className="select" style={{ width: 250, height: 38 }} value={rec.templateId} onChange={(e) => update({ ...doc, templateId: e.target.value }, { templateId: e.target.value })} aria-label="양식">
               {templates.map((t) => (
                 <option key={t.id} value={t.id}>양식: {t.name}</option>
               ))}
             </select>
-            <button className="btn" onClick={() => setHeaderOpen(true)} disabled={!entry}>머리글 편집</button>
+            )}
+            {!doc.fill && <button className="btn" onClick={() => setHeaderOpen(true)} disabled={!entry}>머리글 편집</button>}
             <button className="btn" onClick={exportMarkdown} title="마크다운(.md) 파일 내려받기"><Ic.Doc size={15} /> MD</button>
             <button className="btn" onClick={savePdf} disabled={!entry}><Ic.Printer size={15} /> PDF</button>
             <button className="btn primary" onClick={downloadHwpx} disabled={!entry}><Ic.Download size={15} /> HWPX 내려받기</button>
@@ -165,11 +180,13 @@ export default function Project({ record, pages, onSave, onBack, notify }) {
                 <button key={k} className={`pill-btn ${filter === k ? 'on' : ''}`} onClick={() => setFilter(k)}>{l}</button>
               ))}
             {tab === 'list' && <span className="sep" />}
+            {!doc.fill && <>
             <button className="pill-btn" onClick={() => addBlock(newBlock('heading', { level: 1, text: '소제목' }))}><Ic.Plus size={13} /> 소제목</button>
             <button className="pill-btn" onClick={() => addBlock(newBlock('paragraph'))}><Ic.Plus size={13} /> 문단</button>
             <button className="pill-btn" onClick={() => addBlock(newBlock('list', { text: '• ' }))}><Ic.Plus size={13} /> 목록</button>
             <button className="pill-btn" onClick={() => addBlock(newBlock('box', { title: '' }))}><Ic.Plus size={13} /> 상자</button>
             <button className="pill-btn" onClick={() => addBlock(newBlock('table'))}><Ic.Plus size={13} /> 표</button>
+            </>}
             <span className="sep" />
             <button className="pill-btn" onClick={() => setBlocks(blocks.map((x) => ({ ...x, flag: 'done' })))}><Ic.Check size={13} /> 모두 검토 완료</button>
             <button className="pill-btn" onClick={exportMarkdown} title="마크다운(.md) 파일 내려받기"><Ic.Doc size={13} /> MD</button>
@@ -258,7 +275,7 @@ export default function Project({ record, pages, onSave, onBack, notify }) {
                 </div>
               ))}
             </div>
-            <div>{entry && <Preview doc={doc} entry={entry} zoom={0.55} onPages={setPageCount} onPick={setSel} />}</div>
+            <div>{entry && (fillMode ? <div style={{ zoom: 0.6 }}><FormPreview doc={doc} entry={entry} onPick={setSel} /></div> : <Preview doc={doc} entry={entry} zoom={0.55} onPages={setPageCount} onPick={setSel} />)}</div>
           </div>
         )}
 
@@ -272,7 +289,7 @@ export default function Project({ record, pages, onSave, onBack, notify }) {
               ))}
               <span style={{ marginLeft: 'auto', fontSize: 13, color: 'var(--ink-3)' }}>지면을 누르면 해당 내용을 고칠 수 있어요 · PDF 는 이 모양 그대로 저장됩니다</span>
             </div>
-            {entry ? <Preview doc={doc} entry={entry} zoom={zoom} onPages={setPageCount} onPick={setSel} /> : <div className="loading"><span className="spin" /></div>}
+            {!entry ? <div className="loading"><span className="spin" /></div> : fillMode ? <div style={{ zoom }}><FormPreview doc={doc} entry={entry} onPick={setSel} /></div> : <Preview doc={doc} entry={entry} zoom={zoom} onPages={setPageCount} onPick={setSel} />}
           </>
         )}
       </div>
@@ -348,4 +365,27 @@ function HeaderModal({ entry, doc, onClose, onSave }) {
       </div>
     </div>
   );
+}
+
+/** 채움 작업의 블록 → 학생마다 {[slotId]: text} (⟪⟫ 추정 표시는 hwpx 에 남기지 않는다) */
+export function fillRecords(doc) {
+  const n = Math.max(doc.fill?.records ?? 0, ...(doc.blocks || []).map((b) => (b.rec ?? 0) + 1));
+  const recs = Array.from({ length: n }, () => ({}));
+  for (const b of doc.blocks || []) if (b.slot) recs[b.rec ?? 0][b.slot] = String(b.text ?? '').replace(/[⟪⟫]/g, '');
+  return recs;
+}
+
+/** 채움 미리보기를 그대로 인쇄(PDF 저장) */
+function printForm(doc, entry) {
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  root.render(<FormPreview doc={doc} entry={entry} print />);
+  setTimeout(() => {
+    window.print();
+    setTimeout(() => {
+      root.unmount();
+      host.remove();
+    }, 500);
+  }, 400);
 }

@@ -257,6 +257,97 @@ export function structureText({ key, model, text, subject, signal, onRetry }) {
   return call(key, model || DEFAULT_MODEL, [{ text: prompt({ subject, isText: true }) + '\n\n---\n' + text }], signal, onRetry);
 }
 
+const FILL_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    values: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          id: { type: 'STRING' },
+          text: { type: 'STRING' },
+          guessed: {
+            type: 'ARRAY',
+            description: '글씨가 흐려 맥락으로 추정해 채운 낱말·구절(text 에 쓴 그대로). 없으면 빈 배열.',
+            items: { type: 'STRING' },
+          },
+        },
+        required: ['id', 'text'],
+      },
+    },
+    extra: { type: 'STRING', description: '어느 칸에도 속하지 않는 학생 글씨(없으면 빈 문자열)' },
+  },
+  required: ['values'],
+};
+
+const FILL_RULES = `너는 학교 선생님이 학생 답안지(수행평가·활동지·서술형 답안)를 채점하기 쉽게 한글 문서로 옮기는 일을 돕는다.
+이미지는 학생 한 명이 인쇄된 양식에 손으로 쓴(또는 입력한) 답안지다(여러 장이면 같은 학생의 이어지는 쪽).
+아래 [양식]은 그 답안지의 인쇄된 내용을 순서대로 적은 것이고, 학생이 써 넣는 자리는 [[칸id: 칸 이름]] 으로 표시했다.
+각 칸에 학생이 쓴 내용을 찾아 values 에 {id, text, guessed} 로 옮겨라.
+
+[반드시 지킬 것]
+1. 인쇄된 글자(문항·지문·안내문·칸 이름·자리표시 문구)는 옮기지 않는다. 학생이 쓴 내용만.
+2. 쓰인 그대로: 고치거나 다듬거나 요약하지 말 것. 맞춤법·문법·철자 오류, 띄어쓰기도 학생이 쓴 대로 둔다(채점 자료다).
+   줄이 바뀐 것은 이어 붙이고, 학생이 문단을 나눈 곳만 \\n 으로 나눈다. 번호·기호를 학생이 썼으면 그대로.
+3. 흐리거나 뭉개진 글자는 앞뒤 맥락으로 가장 그럴듯하게 채우고, 그렇게 추정한 낱말·구절은 guessed 에 text 에 쓴 그대로 적는다.
+   조금이라도 확신이 없으면 guessed 에 넣는다. 도저히 알 수 없으면 [?].
+4. 줄을 그어 지운 글자, 지우개 자국, 연습 계산은 옮기지 않는다.
+5. 수식은 LaTeX 로 $ $ 사이에(예: $x^{2}+1$), 화학식은 $\\mathrm{H_2O}$.
+6. 학생이 아무것도 쓰지 않은 칸은 text="" 로 둔다. 학번·이름처럼 짧은 칸은 그 값만(예: "10305", "김민수").
+7. 칸 경계를 넘어 이어 쓴 답은 그 문항의 칸에 모두 넣는다. 어느 칸에도 속하지 않는 학생 글씨만 extra 에.
+8. 목록에 있는 모든 칸 id 를 values 에 한 번씩 넣는다.`;
+
+/**
+ * 채움 양식: 학생 한 명의 답안지 쪽 이미지들 → {values:{[slotId]:{text, guessed}}, extra}
+ * @param slots [{id,label,context}]  outline = formOutline 결과
+ */
+export async function fillFormPages({ key, model, dataUrls, slots, outline, subject, signal, onRetry }) {
+  const parts = [
+    {
+      text: [
+        FILL_RULES,
+        subject ? `과목·활동 참고: ${subject}` : '',
+        `[양식]\n${outline}`,
+        `[칸 목록]\n${slots.map((s) => `- ${s.id}: ${s.label}${s.context && s.context !== s.label ? ` (근처 글: ${s.context})` : ''}`).join('\n')}`,
+      ]
+        .filter(Boolean)
+        .join('\n\n'),
+    },
+    ...dataUrls.map((u) => {
+      const [, mime, data] = /^data:([^;]+);base64,(.*)$/.exec(u);
+      return { inline_data: { mime_type: mime, data } };
+    }),
+  ];
+  const body = { contents: [{ role: 'user', parts }], generationConfig: { temperature: 0, responseMimeType: 'application/json', responseSchema: FILL_SCHEMA } };
+  for (let attempt = 0; ; attempt++) {
+    const r = await fetchWithAuth(
+      `${BASE}/models/${model || DEFAULT_MODEL}:generateContent`,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal },
+      key,
+    );
+    if (r.ok) {
+      const j = await r.json();
+      const text = (j.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('');
+      if (!text) throw new Error(`빈 응답 (${j.candidates?.[0]?.finishReason || j.promptFeedback?.blockReason || '이유 미상'})`);
+      const res = fixLatexEscapes(JSON.parse(text));
+      const values = {};
+      for (const v of res.values || []) if (v?.id) values[v.id] = { text: String(v.text ?? ''), guessed: v.guessed || [] };
+      return { values, extra: String(res.extra ?? '').trim() };
+    }
+    if ((r.status === 429 || r.status >= 500) && attempt < 5) {
+      const wait = Math.min(60, 4 * 2 ** attempt);
+      onRetry?.(wait, r.status);
+      await new Promise((res) => setTimeout(res, wait * 1000));
+      continue;
+    }
+    const msg = await errText(r);
+    if (r.status === 400 && /API key/i.test(msg)) throw new Error('API 키가 올바르지 않습니다. 설정에서 키를 확인해 주세요.');
+    if (r.status === 403) throw new Error('이 키로는 Gemini 를 쓸 수 없습니다(권한 없음). Google AI Studio 에서 새 키를 받아 주세요.');
+    throw new Error(`Gemini 오류: ${msg}`);
+  }
+}
+
 const BOX_SCHEMA = {
   type: 'OBJECT',
   properties: { box_2d: { type: 'ARRAY', items: { type: 'INTEGER' } } },

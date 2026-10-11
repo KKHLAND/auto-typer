@@ -544,6 +544,19 @@ function eqXml(script, charHeight) {
   );
 }
 
+/** 한 줄(인라인 표기) → <hp:run> 들. 밑줄·굵게는 charPr 를 파생, 수식은 hp:equation */
+export function inlineRuns(hdr, text, baseCp, charHeight = 1000) {
+  return parseInline(text)
+    .map((r) => {
+      if (r.eq) return `<hp:run charPrIDRef="${baseCp}">${eqXml(r.text, charHeight)}<hp:t/></hp:run>`;
+      const cp = hdr.charPr(baseCp, { u: !!(r.u || r.blank), b: !!r.b });
+      const t = r.blank ? '          ' : r.text;
+      // 탭은 글자가 아니라 <hp:tab/> 요소로 (글 속 날것의 탭 문자는 한글이 문서를 열다 멈추게 한다)
+      return `<hp:run charPrIDRef="${cp}"><hp:t>${esc(t).replace(/\t/g, '<hp:tab width="2000" leader="0" type="1"/>')}</hp:t></hp:run>`;
+    })
+    .join('');
+}
+
 class Writer {
   constructor(pkg, analysis, opts = {}) {
     this.pkg = pkg;
@@ -607,15 +620,7 @@ class Writer {
   }
 
   runs(text, baseCp) {
-    return parseInline(text)
-      .map((r) => {
-        if (r.eq) return `<hp:run charPrIDRef="${baseCp}">${eqXml(r.text, this.charHeight)}<hp:t/></hp:run>`;
-        const cp = this.hdr.charPr(baseCp, { u: !!(r.u || r.blank), b: !!r.b });
-        const t = r.blank ? '          ' : r.text;
-        // 탭은 글자가 아니라 <hp:tab/> 요소로 (글 속 날것의 탭 문자는 한글이 문서를 열다 멈추게 한다)
-        return `<hp:run charPrIDRef="${cp}"><hp:t>${esc(t).replace(/\t/g, '<hp:tab width="2000" leader="0" type="1"/>')}</hp:t></hp:run>`;
-      })
-      .join('');
+    return inlineRuns(this.hdr, text, baseCp, this.charHeight);
   }
 
   para(paraPr, style, inner) {

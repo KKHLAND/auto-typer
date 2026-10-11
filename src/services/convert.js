@@ -1,10 +1,10 @@
 // 변환 파이프라인: 올린 파일·붙여넣은 글 → 학습자료 문서
-import { assemble, importJson, newDoc, docToMarkdown } from '../model.js';
+import { assemble, importJson, newDoc, newBlock, docToMarkdown, markGuesses, fixSymbols } from '../model.js';
 import { parseText } from '../engine/textParser.js';
 import { formatPuaMathLines } from '../engine/hwpPua.js';
 import { hwpxToText, hwpxImages } from '../engine/hwpxReader.js';
 import { openPdf, renderPage, pageText, cropFigure, cropContext, imageFileToPage, loadImage } from './pdf.js';
-import { recognizePage, structureText, refineFigureBox } from './gemini.js';
+import { recognizePage, structureText, refineFigureBox, fillFormPages } from './gemini.js';
 
 export function fileKind(name) {
   const ext = name.toLowerCase().split('.').pop();
@@ -251,6 +251,70 @@ export async function convert({ files = [], text = '', settings, title, onProgre
   const rawMarkdown = markdowns.filter(Boolean).join('\n\n---\n\n') || docToMarkdown(doc);
   onProgress({ stage: 'done', message: `내용 ${doc.blocks.length}덩이를 정리했습니다` });
   return { doc, pages, engineUsed, markdown: rawMarkdown };
+}
+
+/**
+ * 채움 양식: 학생 답안지 스캔(PDF·사진) → 학생마다 양식 칸에 채울 값
+ * @param o.entry      loadTemplate 결과 (entry.form = {pkg, slots, outline})
+ * @param o.perRecord  학생 한 명의 쪽 수
+ * @returns {Promise<{doc, pages, engineUsed}>}
+ */
+export async function convertFill({ files = [], entry, perRecord = 1, settings, title, onProgress = () => {}, signal }) {
+  if (!settings.apiKey) throw new Error('학생 답안지를 칸에 채우려면 AI 인식이 필요합니다. 설정에서 무료 Gemini 키를 넣어 주세요.');
+  const form = entry.form;
+  const slots = form.slots.filter((s) => !s.off);
+  if (!slots.length) throw new Error('이 양식에서 채울 칸이 모두 꺼져 있습니다. [양식] 메뉴에서 칸을 켜 주세요.');
+  const pages = [];
+  for (const file of files) {
+    const kind = fileKind(file.name);
+    if (kind === 'image') {
+      onProgress({ stage: 'render', message: `${file.name} 불러오는 중` });
+      pages.push(await imageFileToPage(file));
+    } else if (kind === 'pdf') {
+      const pdf = await openPdf(new Uint8Array(await file.arrayBuffer()));
+      for (let n = 1; n <= pdf.numPages; n++) {
+        if (signal?.aborted) throw new DOMException('취소됨', 'AbortError');
+        onProgress({ stage: 'render', page: n, total: pdf.numPages, status: 'running', message: `${file.name} ${n}/${pdf.numPages}쪽 읽는 중` });
+        pages.push(await renderPage(pdf, n, 1800));
+      }
+      pdf.loadingTask?.destroy?.();
+    } else {
+      throw new Error(`${file.name}: 답안지는 PDF(스캔본) 또는 사진(JPG·PNG)으로 올려 주세요.`);
+    }
+  }
+  if (!pages.length) throw new Error('답안지 파일을 올려 주세요.');
+  const n = Math.max(1, Math.round(perRecord) || 1);
+  const groups = [];
+  for (let i = 0; i < pages.length; i += n) groups.push(pages.slice(i, i + n));
+
+  const blocks = [];
+  for (let r = 0; r < groups.length; r++) {
+    if (signal?.aborted) throw new DOMException('취소됨', 'AbortError');
+    onProgress({ stage: 'ai', page: r + 1, total: groups.length, status: 'running', message: `학생 ${r + 1}/${groups.length} 답안 읽는 중` });
+    const res = await fillFormPages({
+      key: settings.apiKey,
+      model: settings.model,
+      dataUrls: groups[r].map((p) => p.dataUrl),
+      slots,
+      outline: form.outline,
+      subject: title,
+      signal,
+      onRetry: (sec, code) => onProgress({ stage: 'ai', page: r + 1, total: groups.length, status: 'waiting', message: `사용량 한도(${code}) — ${sec}초 뒤 다시 시도` }),
+    });
+    const page = r * n;
+    for (const s of slots) {
+      const v = res.values[s.id] || { text: '', guessed: [] };
+      const text = markGuesses(fixSymbols(v.text), v.guessed).trim();
+      blocks.push({ ...newBlock('paragraph', { text, page }), slot: s.id, rec: r, label: s.label, flag: /⟪/.test(text) ? 'check' : 'todo' });
+    }
+    if (res.extra) blocks.push({ ...newBlock('paragraph', { text: fixSymbols(res.extra), page }), slot: null, rec: r, label: '칸 밖 글씨', flag: 'check' });
+    onProgress({ stage: 'ai', page: r + 1, total: groups.length, status: 'done', message: `학생 ${r + 1}/${groups.length} 완료` });
+  }
+  const doc = newDoc(title || entry.meta.name);
+  doc.fill = { templateId: entry.meta.id, perRecord: n, records: groups.length };
+  doc.blocks = blocks;
+  onProgress({ stage: 'done', message: `학생 ${groups.length}명의 답안을 칸에 채웠습니다` });
+  return { doc, pages, engineUsed: 'ai', markdown: '' };
 }
 
 /** kordoc(https://github.com/KKHLAND/kordoc, MIT) 으로 문서 → {마크다운, 그림}. 필요할 때만 불러온다(약 900KB). */

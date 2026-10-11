@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import * as Ic from './icons.jsx';
-import { convert, fileKind } from '../services/convert.js';
-import { listTemplates } from '../services/templates.js';
+import { convert, convertFill, fileKind } from '../services/convert.js';
+import { listTemplates, loadTemplate } from '../services/templates.js';
 
 const KIND_LABEL = { pdf: 'PDF', image: '이미지', hwpx: 'HWPX', json: 'JSON', text: 'TXT', unknown: '?' };
 const extLabel = (name) => {
@@ -21,6 +21,8 @@ export default function NewJob({ settings, onCancel, onDone, onSettings, notify 
   const [engine, setEngine] = useState(settings.engine || 'auto');
   const [handwriting, setHandwriting] = useState(settings.handwriting || 'auto');
   const [mdAction, setMdAction] = useState(settings.mdAction || 'ask');
+  const [fillUse, setFillUse] = useState(true);
+  const [perRecord, setPerRecord] = useState(1);
 
   useEffect(() => {
     if (settings.handwriting) {
@@ -49,7 +51,9 @@ export default function NewJob({ settings, onCancel, onDone, onSettings, notify 
 
   const isMathOrExamFile = files.some((f) => /수학|수능|모의|시험|기출|물리|화학|생명|지구/i.test(f.name));
   const needsAi = files.some((f) => ['image'].includes(fileKind(f.name))) || (isMathOrExamFile && engine === 'ai');
-  const canStart = (files.length || text.trim()) && !running;
+  const selTpl = templates.find((t) => t.id === templateId);
+  const useFill = !!selTpl?.fill && fillUse;
+  const canStart = (useFill ? files.length : files.length || text.trim()) && !running;
 
   const proceedCreate = async (res, tplId, srcName) => {
     const q = res.doc.blocks.length;
@@ -106,6 +110,26 @@ export default function NewJob({ settings, onCancel, onDone, onSettings, notify 
     setLog([]);
     abort.current = new AbortController();
     try {
+      if (useFill) {
+        const entry = await loadTemplate(templateId);
+        const res = await convertFill({
+          files,
+          entry,
+          perRecord,
+          title: title || selTpl.name,
+          settings,
+          signal: abort.current.signal,
+          onProgress: (ev) =>
+            setLog((l) => {
+              const key = `${ev.stage}-${ev.page ?? ''}`;
+              return [...l.filter((x) => x.key !== key), { key, ...ev }].slice(-200);
+            }),
+        });
+        setRunning(false);
+        notify(`학생 ${res.doc.fill.records}명의 답안을 양식 칸에 채웠습니다. 노란 표시는 원본과 꼭 대조해 주세요.`);
+        await onDone({ doc: res.doc, pages: res.pages, templateId, sourceName: files.map((f) => f.name).join(', '), engineUsed: 'ai', markdown: '' });
+        return;
+      }
       const res = await convert({
         files: tab === 'file' ? files : [],
         text: tab === 'paste' ? text : '',
@@ -285,9 +309,29 @@ export default function NewJob({ settings, onCancel, onDone, onSettings, notify 
                   </button>
                 ))}
               </div>
+              {selTpl?.fill && (
+                <div className="fill-box">
+                  <div className="seg">
+                    <button className={fillUse ? 'on' : ''} onClick={() => setFillUse(true)}>양식 칸에 채우기 (학생 답안지)</button>
+                    <button className={!fillUse ? 'on' : ''} onClick={() => setFillUse(false)}>서식만 빌려 정리</button>
+                  </div>
+                  {fillUse && (
+                    <div className="row-inline" style={{ marginTop: 8, gap: 8, alignItems: 'center', fontSize: 13.5 }}>
+                      학생 한 명당
+                      <input className="input" type="number" min={1} max={10} value={perRecord} style={{ width: 64, height: 32 }} onChange={(e) => setPerRecord(Math.max(1, Math.min(10, +e.target.value || 1)))} />
+                      쪽
+                    </div>
+                  )}
+                  <div className="hint">
+                    {fillUse
+                      ? '학생들 답안지를 한 PDF로 스캔해 올리세요. 학생마다 양식 한 부씩, 학번·이름·답을 원래 칸에 옮겨 적은 hwpx 를 만듭니다(AI 키 필요). 쓰인 그대로 옮기며 맞춤법 오류도 고치지 않습니다.'
+                      : '양식의 글꼴·쪽 설정만 빌려, 읽은 내용을 위에서부터 차례로 정리합니다.'}
+                  </div>
+                </div>
+              )}
               <div className="hint">기본 양식은 A4 2단 학습지 샘플입니다. 원하는 양식이 있으면 [양식] 메뉴에서 HWPX로 올려 그 모양 그대로 만들 수 있습니다.</div>
             </div>
-            <div className="field">
+            <div className="field" style={useFill ? { display: 'none' } : undefined}>
               <span className="lab">인식 방식</span>
               <div className="seg">
                 {[
@@ -304,7 +348,7 @@ export default function NewJob({ settings, onCancel, onDone, onSettings, notify 
                 {engine === 'rules' && 'AI 없이 제목(#)·목록 기호·표 같은 모양만 보고 즉시 나눕니다. 인터넷이 없어도 됩니다.'}
               </div>
             </div>
-            <div className="field">
+            <div className="field" style={useFill ? { display: 'none' } : undefined}>
               <span className="lab">손글씨 처리</span>
               <div className="seg">
                 {[
