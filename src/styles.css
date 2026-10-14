@@ -626,3 +626,8 @@ mark.guess { background: #ffe58a; color: inherit; border-radius: 2px; box-shadow
   .form-print .val mark { background: none; }
 }
 .fill-box { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--blue-50); background: #f7faff; border-radius: 10px; }
+
+.page.page-border { outline: 0.4mm solid #000; outline-offset: -5mm; }
+.hd-mm { display: flex; align-items: flex-end; padding: 0 0 1.6mm; box-sizing: border-box; flex: none; font-family: var(--body-face, 'Noto Serif KR', serif); font-size: 11pt; font-weight: 700; }
+.hd-mm.rule { border-bottom: 0.25mm solid #000; }
+.hd-mm > div { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }

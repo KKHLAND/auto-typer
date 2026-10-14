@@ -59,7 +59,7 @@ export default function Home({
                   <span className="ellipsis">{p.title}</span>
                 </span>
               </td>
-              <td className="muted">{tpl?.name ?? '직접 올린 양식'}</td>
+              <td className="muted">{tpl?.name ?? '예전 양식'}</td>
               <td className="num">{s.total}</td>
               <td>
                 <span className="progress"><i style={{ width: `${s.pct}%` }} /></span>
@@ -115,7 +115,7 @@ export default function Home({
               <h3>학습자료를 올리면, 원하는 학교 양식의 한글 파일로.</h3>
               <p>
                 수업 자료·학습지·판서 사진·손글씨 필기·PDF·hwpx·텍스트를 올리거나 붙여 넣으세요. 손글씨까지 빠르게 읽어
-                내용은 고치지 않고 제목·문단·목록·상자·표로만 나눈 뒤, <b>원하는 양식</b>(우리 학교 hwpx, 또는 샘플 양식)에 그대로 담아 <b>hwpx</b> 와 <b>PDF</b> 로 만듭니다.
+                내용은 고치지 않고 제목·문단·목록·상자·표로만 나눈 뒤, <b>기본 양식</b>(2단 또는 1단 학습지)에 담아 <b>hwpx</b> 와 <b>PDF</b> 로 만듭니다.
               </p>
               <div className="steps">
                 <span className="step"><b>1</b>올리기</span>

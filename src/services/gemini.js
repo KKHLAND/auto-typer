@@ -348,6 +348,66 @@ export async function fillFormPages({ key, model, dataUrls, slots, outline, subj
   }
 }
 
+const LAYOUT_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    paperMm: { type: 'OBJECT', properties: { w: { type: 'NUMBER' }, h: { type: 'NUMBER' } } },
+    marginsMm: { type: 'OBJECT', properties: { top: { type: 'NUMBER' }, bottom: { type: 'NUMBER' }, left: { type: 'NUMBER' }, right: { type: 'NUMBER' } } },
+    columns: { type: 'INTEGER' },
+    columnLine: { type: 'BOOLEAN' },
+    pageBorder: { type: 'BOOLEAN' },
+    header: {
+      type: 'OBJECT',
+      properties: {
+        cells: {
+          type: 'ARRAY',
+          items: {
+            type: 'OBJECT',
+            properties: { text: { type: 'STRING' }, widthPct: { type: 'NUMBER' }, align: { type: 'STRING', enum: ['left', 'center', 'right'] }, bold: { type: 'BOOLEAN' } },
+            required: ['text'],
+          },
+        },
+        ruleBelow: { type: 'BOOLEAN' },
+      },
+    },
+    footer: { type: 'OBJECT', properties: { pageNumber: { type: 'STRING', enum: ['dash', 'plain', 'none'] } } },
+    bodyPt: { type: 'NUMBER' },
+    titlePt: { type: 'NUMBER' },
+  },
+  required: ['columns', 'header', 'footer'],
+};
+
+const LAYOUT_RULES = `이 이미지는 학교 학습자료·시험지·학습지의 첫 쪽이다. 내용이 아니라 '쪽 모양'만 읽어 한글 양식을 똑같이 만들 수 있게 알려 줘라.
+- paperMm: 용지 크기(mm). 대개 A4 210×297, B4 257×364, A3 297×420.
+- marginsMm: 종이 가장자리에서 글자 영역(머리 줄 포함)까지의 여백(mm).
+- columns: 본문 단 수(1 또는 2), columnLine: 단 사이에 세로 선이 있으면 true. pageBorder: 쪽 둘레에 테두리 상자가 있으면 true.
+- header.cells: 맨 위 머리 줄(학교명·시험명·과목·자료 제목·학년반 등)을 왼쪽부터 칸으로 나눈 것. 칸마다 보이는 글자 그대로(text),
+  너비 비율(widthPct, 합 100), 정렬(align), 굵게(bold). 학번·이름 쓰는 칸은 '학번 (    ) 이름 (    )' 처럼 빈칸 모양 그대로.
+  머리 줄이 없으면 빈 배열. ruleBelow: 머리 줄 아래 가로선이 있으면 true.
+- footer.pageNumber: 아래쪽 쪽 번호가 '- 1 -' 꼴이면 dash, '1' 꼴이면 plain, 없으면 none.
+- bodyPt: 본문 글자 크기(pt, 보통 9~11), titlePt: 머리 줄에서 가장 큰 글자 크기(pt).`;
+
+/** 쪽 사진 → 쪽 모양(spec) — 원본 모양 따라 만들기 */
+export async function readLayout({ key, model, dataUrl, signal }) {
+  const [, mime, data] = /^data:([^;]+);base64,(.*)$/.exec(dataUrl);
+  const r = await fetchWithAuth(
+    `${BASE}/models/${model || DEFAULT_MODEL}:generateContent`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: LAYOUT_RULES }, { inline_data: { mime_type: mime, data } }] }],
+        generationConfig: { temperature: 0, responseMimeType: 'application/json', responseSchema: LAYOUT_SCHEMA },
+      }),
+      signal,
+    },
+    key,
+  );
+  if (!r.ok) throw new Error(await errText(r));
+  const j = await r.json();
+  return JSON.parse((j.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('') || '{}');
+}
+
 const BOX_SCHEMA = {
   type: 'OBJECT',
   properties: { box_2d: { type: 'ARRAY', items: { type: 'INTEGER' } } },

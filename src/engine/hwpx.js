@@ -11,6 +11,7 @@ import { unzipSync, zipSync } from 'fflate';
 import { toHwpEquation, measureEquation } from './equation.js';
 import { parseInline, paragraphs, plain } from './markup.js';
 import { blockSummary, isQuestionStart } from '../model.js';
+import { findContentAnchor } from './form.js';
 
 // 8×11 흰색 PNG (미리보기 썸네일 자리 채움)
 const BLANK_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAgAAAALCAAAAABn8JP5AAAAD0lEQVR4nGP4DwUMNGMAAPRPV6nJuRPhAAAAAElFTkSuQmCC';
@@ -215,7 +216,7 @@ export function analyzeTemplate(pkg) {
   const isList = (x) => LIST_RE.test(x.text);
 
   const bodyCands = nonEmpty.filter((x) => !isList(x) && x.len >= 40);
-  const body = pick(bodyCands) ?? pick(nonEmpty.filter((x) => !isList(x))) ?? pick(nonEmpty) ?? { paraPr: '0', style: '0', charPr: '0' };
+  const body = pick(bodyCands) ?? pick(nonEmpty.filter((x) => !isList(x))) ?? pick(nonEmpty) ?? pick(samples) ?? { paraPr: '0', style: '0', charPr: '0' };
   const bodyC = charInfo(header, body.charPr);
   const listCands = nonEmpty.filter(isList);
   const list = pick(listCands);
@@ -822,9 +823,16 @@ export function buildHwpx(templatePkg, doc, opts = {}) {
   const { paras } = topLevelParas(sec);
   const [s0, e0] = paras[0];
   const w = new Writer(pkg, analysis, opts);
-  const p0 = fitHeaderCells(clearP0BodyText(sec.slice(s0, e0)), w.hdr);
-  const body = w.write(doc);
-  writeText(pkg, 'Contents/section0.xml', sec.slice(0, s0) + p0 + body + '</hs:sec>');
+  if (opts.keepBody) {
+    // 올린 양식을 한 글자도 버리지 않고, 내용 자리(표시·큰 빈 상자·끝의 빈 줄·맨 끝)에 읽은 내용을 넣는다
+    const a = findContentAnchor(sec, analysis.geometry);
+    if (a.width) w.a = { ...w.a, geometry: { ...w.a.geometry, colWidth: a.width } };
+    writeText(pkg, 'Contents/section0.xml', sec.slice(0, a.start) + w.write(doc) + sec.slice(a.end));
+  } else {
+    const p0 = fitHeaderCells(clearP0BodyText(sec.slice(s0, e0)), w.hdr);
+    const body = w.write(doc);
+    writeText(pkg, 'Contents/section0.xml', sec.slice(0, s0) + p0 + body + '</hs:sec>');
+  }
   writeText(pkg, 'Contents/header.xml', w.hdr.xml);
 
   let hpf = readText(pkg, 'Contents/content.hpf');
@@ -858,7 +866,7 @@ export function buildHwpx(templatePkg, doc, opts = {}) {
   if (doc.title) hpf = hpf.replace(/<opf:title>[\s\S]*?<\/opf:title>|<opf:title\/>/, `<opf:title>${esc(doc.title)}</opf:title>`);
   // 양식 원본의 문서 정보(만든 사람·마지막 저장한 사람·주제·날짜 등)는 남기지 않는다
   hpf = hpf.replace(
-    /(<opf:meta name="(?:creator|lastsaveby|subject|description|keyword|date)"[^>]*>)[\s\S]*?(<\/opf:meta>)/g,
+    /(<opf:meta name="(?:creator|lastsaveby|subject|description|keyword|date)"[^>]*[^/>]>)[^<]*(<\/opf:meta>)/g,
     '$1$2',
   );
   writeText(pkg, 'Contents/content.hpf', hpf);

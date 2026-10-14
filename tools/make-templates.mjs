@@ -1,5 +1,5 @@
 // 내장 샘플 양식 만들기: 수능 2단 서식(글꼴·본문·목록 서식)을 바탕으로 한 A4 2단 학습지
-//   머리: [학교명] [학습 자료명] [학번·이름]  — 교시·홀수형·영역 같은 시험 문구는 넣지 않는다
+//   머리: [학교명] [학습 자료명] [빈 칸]  — 교시·홀수형·영역 같은 시험 문구는 넣지 않는다
 // 사용: npm run templates   (상위 폴더 cowork/ 의 원본 샘플 hwpx 가 필요)
 import { readFileSync, writeFileSync } from 'node:fs';
 import {
@@ -62,7 +62,7 @@ const headTable =
   `<hp:sz width="${BODY_W}" widthRelTo="ABSOLUTE" height="${H}" heightRelTo="ABSOLUTE" protect="0"/>` +
   `<hp:pos treatAsChar="0" affectLSpacing="0" flowWithText="1" allowOverlap="1" holdAnchorAndSO="0" vertRelTo="PARA" horzRelTo="COLUMN" vertAlign="TOP" horzAlign="LEFT" vertOffset="0" horzOffset="0"/>` +
   `<hp:outMargin left="0" right="0" top="0" bottom="1134"/><hp:inMargin left="141" right="141" top="141" bottom="141"/>` +
-  `<hp:tr>${cell(0, para(P.left, cp.school, '○○고등학교'))}${cell(1, para(P.center, cp.title, '학습 자료명'))}${cell(2, para(P.right, cp.id, '학번 (     )  이름 (       )'))}</hp:tr></hp:tbl>`;
+  `<hp:tr>${cell(0, para(P.left, cp.school, '○○고등학교'))}${cell(1, para(P.center, cp.title, '학습 자료명'))}${cell(2, para(P.right, cp.id, ''))}</hp:tr></hp:tbl>`;
 
 // 구역 설정: 원본 secPr 을 A4 로
 const sec0 = readText(src, 'Contents/section0.xml');

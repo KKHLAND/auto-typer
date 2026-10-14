@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { unzipSync } from 'fflate';
 import { assemble, isExamBoilerplate, isQuestionStart } from '../src/model.js';
-import { loadHwpx, buildHwpx } from '../src/engine/hwpx.js';
+import { loadHwpx, buildHwpx, topLevelParas } from '../src/engine/hwpx.js';
 
 let fail = 0;
 const expect = (name, ok) => { if (!ok) { console.error('FAIL', name); fail++; } };
@@ -33,7 +33,7 @@ expect('일반 표는 안내문 아님', !isExamBoilerplate({ type: 'table', row
 const tpl = loadHwpx(readFileSync('public/templates/sample.hwpx'));
 const analysis = JSON.parse(readFileSync('public/templates/sample.profile.json', 'utf8'));
 const sec = new TextDecoder().decode(unzipSync(buildHwpx(tpl, { title: 't', blocks: bs }, { analysis }))['Contents/section0.xml']);
-const paras = [...sec.matchAll(/<hp:p\b[\s\S]*?<\/hp:p>/g)].map((m) => m[0]).slice(1);
+const paras = topLevelParas(sec).paras.map(([a, b]) => sec.slice(a, b)).slice(1); // 첫 문단(머리 표가 든 p0) 제외
 const textOf = (p) => [...p.matchAll(/<hp:t>([^<]*)<\/hp:t>/g)].map((m) => m[1]).join('');
 const gaps = paras.filter((p, i) => /^(\d+\.|\[서)/.test(textOf(p)) && i > 0 && !textOf(paras[i - 1]).trim()).length;
 expect(`문항 앞 빈 줄 2개 (실제 ${gaps})`, gaps === 2);

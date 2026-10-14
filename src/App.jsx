@@ -3,7 +3,6 @@ import * as Ic from './ui/icons.jsx';
 import Home from './ui/Home.jsx';
 import NewJob from './ui/NewJob.jsx';
 import Project from './ui/Project.jsx';
-import Templates from './ui/Templates.jsx';
 import Settings from './ui/Settings.jsx';
 import { all, del, get, put, loadSettings, saveSettings } from './services/store.js';
 import { sampleDoc } from './sampleDoc.js';
@@ -81,7 +80,6 @@ export default function App() {
   const nav = [
     { key: 'home', label: '홈', icon: Ic.Home },
     { key: 'projects', label: '내 작업', icon: Ic.List, badge: projects.length },
-    { key: 'templates', label: '양식', icon: Ic.Layout },
     { key: 'settings', label: '설정', icon: Ic.Gear },
   ];
   const active = view.name === 'project' || view.name === 'new' ? 'projects' : view.name;
@@ -175,7 +173,6 @@ export default function App() {
         {view.name === 'project' && (
           <ProjectLoader id={view.id} projects={projects} onSave={saveProject} onBack={() => setView({ name: 'projects' })} notify={notify} settings={settings} />
         )}
-        {view.name === 'templates' && <Templates notify={notify} />}
         {view.name === 'settings' && <Settings settings={settings} setSettings={setSettings} notify={notify} tab={view.tab} />}
       </main>
 

@@ -104,7 +104,10 @@ export function parseForm(sec) {
       }
       case 'cellSz': {
         const c = cellStack[cellStack.length - 1];
-        if (c) c.w = +(/width="(\d+)"/.exec(attrs)?.[1] ?? 0);
+        if (c) {
+          c.w = +(/width="(\d+)"/.exec(attrs)?.[1] ?? 0);
+          c.h = +(/height="(\d+)"/.exec(attrs)?.[1] ?? 0);
+        }
         break;
       }
       case 'tbl': {
@@ -305,6 +308,46 @@ export function slotLayout(pkg, slots) {
     s.paras.forEach((i) => covered.add(i));
   }
   return { first, covered, fields: fieldParas(sec, F, slots) };
+}
+
+// 양식 속 '내용 자리' 표시: {{내용}} · [내용] · 여기에 내용을 입력하세요 · (본문) 등
+const CONTENT_MARK = /\{\{\s*(?:내용|본문|학습\s*내용|content|body)\s*\}\}|^[\[(<〈【]?\s*(?:여기에\s*)?(?:학습\s*)?(?:내용|본문)(?:을|를)?\s*(?:입력|작성|넣)?[^\n]{0,16}?[\])>〉】]?$/i;
+
+/**
+ * 올린 양식을 그대로 두고 읽은 내용을 넣을 자리 찾기
+ *   1) 내용 자리 표시 문단  2) 큰 빈 상자(1칸 표)  3) 맨 끝의 빈 문단들  4) 없으면 양식 맨 끝
+ * @returns {{start, end, width, how}}  sec[start,end) 를 내용으로 바꾼다. width = 상자 안이면 그 안쪽 폭(HWPUNIT)
+ */
+export function findContentAnchor(sec, geo) {
+  const F = parseForm(sec);
+  const usable = (p) => F.containers[p.container].kind !== 'skip';
+  const innerW = (C) => (C?.cell ? Math.max(4000, C.cell.w - 1020) : 0);
+  for (const p of F.paras) {
+    if (!usable(p) || p.hasObj || !CONTENT_MARK.test(p.text.trim())) continue;
+    return { start: p.start, end: p.end, width: innerW(F.containers[p.container]), how: 'mark' };
+  }
+  for (const T of F.tables) {
+    if (T.skip || T.cells.length !== 1) continue;
+    const c = T.cells[0];
+    const C = c.container != null ? F.containers[c.container] : null;
+    if (!C || !C.paras.length) continue;
+    const ps = C.paras.map((i) => F.paras[i]);
+    if (ps.some((x) => x.hasObj || x.text.trim())) continue;
+    if (c.w < geo.colWidth * 0.75 || c.h < geo.height * 0.2) continue;
+    return { start: ps[0].start, end: ps[ps.length - 1].end, width: innerW(C), how: 'box' };
+  }
+  const top = F.containers[0].paras.map((i) => F.paras[i]);
+  let k = top.length;
+  while (k > 1 && !top[k - 1].hasObj && !top[k - 1].field && !top[k - 1].text.trim()) k--;
+  if (k < top.length) return { start: top[k].start, end: top[top.length - 1].end, width: 0, how: 'blank' };
+  const last = top[top.length - 1];
+  return { start: last.end, end: last.end, width: 0, how: 'end' };
+}
+
+/** 양식 본문 글자 수 (첫 문단·머리말 제외) — 많으면 빈 양식이 아니라 내용이 든 문서로 본다 */
+export function bodyTextLength(sec) {
+  const F = parseForm(sec);
+  return F.paras.filter((p) => p.i > 0 && F.containers[p.container].kind !== 'skip').reduce((n, p) => n + p.text.trim().length, 0);
 }
 
 /** AI 에게 줄 양식 글:인쇄된 내용 순서대로, 채울 자리는 [[s3: 이름]] */
@@ -528,7 +571,7 @@ export function buildFilledHwpx(formPkg, slots, records, { title = '' } = {}) {
     pkg.files['Contents/header.xml'] = enc.encode(hdr.xml.replace(/(<hh:head\b[^>]*\bsecCnt=")\d+"/, (_, a) => `${a}1"`));
   }
   if (title) hpf = hpf.replace(/<opf:title>[\s\S]*?<\/opf:title>|<opf:title\/>/, `<opf:title>${esc(title)}</opf:title>`);
-  hpf = hpf.replace(/(<opf:meta name="(?:creator|lastsaveby|subject|description|keyword|date)"[^>]*>)[\s\S]*?(<\/opf:meta>)/g, '$1$2');
+  hpf = hpf.replace(/(<opf:meta name="(?:creator|lastsaveby|subject|description|keyword|date)"[^>]*[^/>]>)[^<]*(<\/opf:meta>)/g, '$1$2');
   pkg.files['Contents/content.hpf'] = enc.encode(hpf);
   if (pkg.files['Preview/PrvText.txt']) {
     pkg.files['Preview/PrvText.txt'] = enc.encode(recs.map((r) => Object.values(r).join(' ')).join('\r\n').slice(0, 1000));

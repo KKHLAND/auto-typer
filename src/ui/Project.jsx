@@ -99,7 +99,7 @@ export default function Project({ record, pages, onSave, onBack, notify, setting
       if (doc.fill) {
         if (!e.form) throw new Error('채움 양식을 찾지 못했습니다 (양식이 지워졌나요?)');
         bytes = buildFilledHwpx(e.form.pkg, e.form.slots.filter((x) => !x.off), fillRecords(doc), { title: doc.title });
-      } else bytes = buildHwpx(e.pkg, doc, { analysis: e.analysis, headerEdits: effectiveEdits(e, doc) });
+      } else bytes = buildHwpx(e.pkg, doc, { analysis: e.analysis, headerEdits: effectiveEdits(e, doc), keepBody: e.keepBody });
       const url = URL.createObjectURL(new Blob([bytes], { type: 'application/hwp+zip' }));
       Object.assign(document.createElement('a'), { href: url, download: fileName('hwpx') }).click();
       setTimeout(() => URL.revokeObjectURL(url), 4000);
@@ -149,6 +149,7 @@ export default function Project({ record, pages, onSave, onBack, notify, setting
               <span className="chip blue" style={{ height: 30, fontSize: 13 }}>채움 양식: {tpl?.name ?? '(지워진 양식)'} · 학생 {doc.fill.records ?? ''}명</span>
             ) : (
             <select className="select" style={{ width: 250, height: 38 }} value={rec.templateId} onChange={(e) => update({ ...doc, templateId: e.target.value }, { templateId: e.target.value })} aria-label="양식">
+              {!templates.some((t) => t.id === rec.templateId) && <option value={rec.templateId}>양식: 예전에 올린 양식</option>}
               {templates.map((t) => (
                 <option key={t.id} value={t.id}>양식: {t.name}</option>
               ))}

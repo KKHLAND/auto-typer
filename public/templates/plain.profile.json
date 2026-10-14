@@ -1,0 +1,168 @@
+{
+  "profile": {
+    "body": {
+      "paraPr": "1",
+      "style": "0",
+      "charPr": "15"
+    },
+    "list": {
+      "paraPr": "33",
+      "style": "0",
+      "charPr": "15"
+    },
+    "h1": {
+      "derive": {
+        "scale": 1.5,
+        "bold": true
+      }
+    },
+    "h2": {
+      "derive": {
+        "scale": 1.25,
+        "bold": true
+      }
+    },
+    "h3": {
+      "derive": {
+        "scale": 1.1,
+        "bold": true
+      }
+    },
+    "spacer": {
+      "paraPr": "7",
+      "style": "0",
+      "charPr": "15"
+    },
+    "list2": {
+      "paraPr": "7",
+      "style": "0",
+      "charPr": "15"
+    }
+  },
+  "css": {
+    "body": {
+      "size": 10,
+      "bold": false,
+      "face": "한컴바탕",
+      "align": "JUSTIFY",
+      "indent": 10,
+      "left": 5,
+      "line": 160,
+      "prev": 0,
+      "next": 0
+    },
+    "list": {
+      "size": 10,
+      "bold": false,
+      "face": "한컴바탕",
+      "align": "JUSTIFY",
+      "indent": -10,
+      "left": 5,
+      "line": 160,
+      "prev": 0,
+      "next": 0
+    },
+    "list2": {
+      "size": 10,
+      "bold": false,
+      "face": "한컴바탕",
+      "align": "JUSTIFY",
+      "indent": 0,
+      "left": 5,
+      "line": 160,
+      "prev": 0,
+      "next": 0
+    },
+    "list3": {
+      "size": 10,
+      "bold": false,
+      "face": "한컴바탕",
+      "align": "JUSTIFY",
+      "indent": 0,
+      "left": 23,
+      "line": 160,
+      "prev": 0,
+      "next": 0
+    },
+    "h1": {
+      "size": 15,
+      "bold": true,
+      "face": "한컴바탕",
+      "align": "LEFT",
+      "indent": 0,
+      "left": 0,
+      "line": 160,
+      "prev": 6,
+      "next": 0
+    },
+    "h2": {
+      "size": 12.5,
+      "bold": true,
+      "face": "한컴바탕",
+      "align": "LEFT",
+      "indent": 0,
+      "left": 0,
+      "line": 160,
+      "prev": 6,
+      "next": 0
+    },
+    "h3": {
+      "size": 11,
+      "bold": true,
+      "face": "한컴바탕",
+      "align": "LEFT",
+      "indent": 0,
+      "left": 0,
+      "line": 160,
+      "prev": 6,
+      "next": 0
+    }
+  },
+  "geometry": {
+    "width": 59528,
+    "height": 84188,
+    "margin": {
+      "left": 4252,
+      "right": 4252,
+      "top": 7087,
+      "bottom": 4252,
+      "header": 4490,
+      "footer": 2835
+    },
+    "cols": 1,
+    "gap": 1702,
+    "colWidth": 51024
+  },
+  "headerTexts": [
+    {
+      "key": "Contents/section0.xml#p0@0",
+      "file": "Contents/section0.xml#p0",
+      "index": 0,
+      "text": "- "
+    },
+    {
+      "key": "Contents/section0.xml#p0@1",
+      "file": "Contents/section0.xml#p0",
+      "index": 1,
+      "text": " -"
+    },
+    {
+      "key": "Contents/section0.xml#p0@2",
+      "file": "Contents/section0.xml#p0",
+      "index": 2,
+      "text": "○○고등학교"
+    },
+    {
+      "key": "Contents/section0.xml#p0@3",
+      "file": "Contents/section0.xml#p0",
+      "index": 3,
+      "text": "학습 자료명"
+    }
+  ],
+  "stats": {
+    "paragraphs": 16,
+    "body": 3,
+    "list": 12,
+    "heading": 0
+  }
+}

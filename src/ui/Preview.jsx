@@ -35,6 +35,7 @@ export default function Preview({ doc, entry, zoom = 0.8, onPages, onPick, hostI
         geometry: entry.analysis.geometry,
         css: entry.analysis.css,
         theme: entry.meta.theme,
+        head: entry.meta.head,
         headerTexts: headerStrings(entry, doc),
       });
       if (alive) {
@@ -67,7 +68,7 @@ export async function printDoc(doc, entry) {
   off.style.cssText = 'position:fixed;left:-20000px;top:0;';
   document.body.appendChild(off);
   try {
-    await layout(off, { doc, geometry: entry.analysis.geometry, css: entry.analysis.css, theme: entry.meta.theme, headerTexts: headerStrings(entry, doc) });
+    await layout(off, { doc, geometry: entry.analysis.geometry, css: entry.analysis.css, theme: entry.meta.theme, head: entry.meta.head, headerTexts: headerStrings(entry, doc) });
     printPages(off, entry.analysis.geometry);
   } finally {
     setTimeout(() => off.remove(), 1500);

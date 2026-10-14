@@ -104,13 +104,22 @@ export function pageSpec(geometry) {
 }
 
 // ── 테마별 머리·꼬리 ──
-// sample: 머리 문구 = [쪽 번호 앞, 쪽 번호 뒤, 학교명, 학습 자료명, 학번·이름(한 줄)]
+// sample·plain(1단): 머리 문구 = [쪽 번호 앞, 쪽 번호 뒤, 학교명, 학습 자료명] (오른쪽 칸은 비어 있음)
 //   hwpx 에서는 머리 표가 머리말에 있어 모든 쪽에 되풀이된다 → 미리보기도 쪽마다, 머리말 높이 그대로
 const HEAD_GAP = 4; // mm — 머리 표와 본문 사이
-const REPEAT_HEAD = new Set(['sample']);
-function headerHtml(theme, T, S) {
+const REPEAT_HEAD = new Set(['sample', 'mimic', 'plain']);
+function headerHtml(theme, T, S, head) {
+  // 원본 모양 따라 만든 양식: 머리 표 칸을 너비·정렬·크기대로
+  if (theme === 'mimic') {
+    if (!head?.cells?.length) return '';
+    const h = Math.max(8, S.head - HEAD_GAP);
+    const cells = head.cells
+      .map((c) => `<div style="flex:0 0 ${c.widthPct}%;text-align:${c.align}${c.size ? `;font-size:${c.size}pt` : ''}">${esc(T[c.i] ?? '')}</div>`)
+      .join('');
+    return `<div class="hd-mm${head.rule ? ' rule' : ''}" style="height:${h}mm;margin-bottom:${HEAD_GAP}mm">${cells}</div>`;
+  }
   const t = (i, d = '') => esc(T[i] ?? d);
-  if (theme === 'sample') {
+  if (theme === 'sample' || theme === 'plain') {
     const h = Math.max(8, S.head - HEAD_GAP);
     return `<div class="hd-sp" style="height:${h}mm;margin-bottom:${HEAD_GAP}mm"><div class="l">${t(2)}</div><div class="c">${t(3)}</div><div class="r">${t(4)}</div></div>`;
   }
@@ -118,8 +127,9 @@ function headerHtml(theme, T, S) {
   return `<div class="hd-gen">${lines.map((l, i) => `<div class="${i === 0 ? 'b' : ''}">${esc(l)}</div>`).join('')}</div>`;
 }
 
-function footerHtml(theme, T, n, total) {
-  if (theme === 'sample') return `<div class="ft-gen">${esc(T[0] ?? '- ')}${n}${esc(T[1] ?? ' -')}</div>`;
+function footerHtml(theme, T, n, total, last, head) {
+  if (theme === 'mimic') return head?.pageNum === 'none' ? '' : `<div class="ft-gen">${head?.pageNum === 'plain' ? n : `- ${n} -`}</div>`;
+  if (theme === 'sample' || theme === 'plain') return `<div class="ft-gen">${esc(T[0] ?? '- ')}${n}${esc(T[1] ?? ' -')}</div>`;
   return `<div class="ft-gen">${n} / ${total}</div>`;
 }
 
@@ -129,7 +139,7 @@ function footerHtml(theme, T, n, total) {
  * @param {{doc, geometry, theme, headerTexts:string[]}} o
  * @returns {number} 쪽 수
  */
-export async function layout(host, { doc, geometry, theme, headerTexts, css }) {
+export async function layout(host, { doc, geometry, theme, headerTexts, css, head }) {
   if (document.fonts?.ready) await document.fonts.ready;
   const S = pageSpec(geometry);
   host.innerHTML = '';
@@ -143,10 +153,10 @@ export async function layout(host, { doc, geometry, theme, headerTexts, css }) {
   const newPage = () => {
     const n = pages.length + 1;
     const pg = document.createElement('section');
-    pg.className = 'page';
+    pg.className = head?.border ? 'page page-border' : 'page';
     const repeat = REPEAT_HEAD.has(theme);
     pg.style.cssText = `width:${S.w}mm;height:${S.h}mm;padding:${repeat ? S.top : S.mt}mm ${S.mr}mm ${S.mb}mm ${S.ml}mm`;
-    pg.innerHTML = `${repeat || n === 1 ? headerHtml(theme, headerTexts, S) : ''}<div class="body"></div><div class="foot"></div>`;
+    pg.innerHTML = `${repeat || n === 1 ? headerHtml(theme, headerTexts, S, head) : ''}<div class="body"></div><div class="foot"></div>`;
     const body = pg.querySelector('.body');
     host.appendChild(pg);
     // 머리 표 칸에 글이 넘치면 한 줄에 들도록 글자를 줄인다 (hwpx 의 fitHeaderCells 와 같게, 최소 8pt)
@@ -215,7 +225,7 @@ export async function layout(host, { doc, geometry, theme, headerTexts, css }) {
     pages.pop().remove();
   }
   pages.forEach((pg, k) => {
-    pg.querySelector('.foot').innerHTML = footerHtml(theme, headerTexts, k + 1, pages.length, k === pages.length - 1);
+    pg.querySelector('.foot').innerHTML = footerHtml(theme, headerTexts, k + 1, pages.length, k === pages.length - 1, head);
   });
   return pages.length;
 }
