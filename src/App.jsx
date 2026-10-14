@@ -104,7 +104,7 @@ export default function App() {
               <h1>Auto-typer</h1>
               <span className="mh-badge">에듀테크 기술 활용</span>
             </div>
-            <p>스캔본·사진·손글씨·PDF 학습자료를 원하는 양식의 HWPX·PDF로 즉시 변환</p>
+            <p>스캔본·사진·손글씨·PDF 학습자료를 기본 양식의 HWPX·PDF로 즉시 변환</p>
           </button>
         </div>
         <div className="mh-right">
