@@ -3,12 +3,15 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "predev": "node tools/copy-pdfjs-assets.mjs",
     "dev": "vite",
     "prebuild": "node tools/copy-pdfjs-assets.mjs",
     "build": "vite build",
-    "start": "node server.ts",
+    "start": "node server.js",
     "preview": "vite preview",
     "test": "node tests/engine.test.mjs && node tests/math.test.mjs && node tests/figure-clean.test.mjs && node tests/escapes.test.mjs && node tests/exam-layout.test.mjs && node tests/form.test.mjs && node tests/mimic.test.mjs",
     "templates": "node tools/make-templates.mjs"

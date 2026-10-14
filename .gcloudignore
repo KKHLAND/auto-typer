@@ -1,0 +1,13 @@
+# gcloud 로 올릴 때 빼는 파일 (빌드는 Cloud Build 안에서 새로 한다)
+.gcloudignore
+.git
+.gitignore
+node_modules/
+dist/
+tests/out/
+tests/fixtures/
+public/pdfjs/
+.claude/
+.env
+desktop.ini
+*.log

@@ -10,3 +10,4 @@ public/pdfjs/
 tools/kordoc/.entry.ts
 tools/kordoc/.entry-eq.ts
 desktop.ini
+.env

@@ -37,6 +37,17 @@
 쓰인 그대로 읽고, 양식을 한 부씩 복사해 칸에 채운 hwpx 하나를 만듭니다(학생마다 새 쪽). 양식의 표·글꼴·쪽 설정은 그대로입니다.
 엔진: `src/engine/form.js` (detectSlots · formOutline · buildFilledHwpx), 시험: `tests/form.test.mjs`, 시험용 양식: `tools/make-form-fixture.mjs`.
 
+## Google Cloud Run 배포
+
+저장소의 `Dockerfile` 로 빌드한다(1단계 vite 빌드 → 2단계 `dist` + `server.js` 만 담은 가벼운 이미지, 포트는 Cloud Run 의 `PORT`).
+
+```bash
+gcloud run deploy auto-typer --source . --region asia-northeast3 --allow-unauthenticated
+```
+
+- 서버는 순수 JavaScript(`server.js`)다. 예전 `node server.ts` 는 Node 22.18 미만에서 `.ts` 를 못 읽어 컨테이너가 바로 죽었다(배포 실패 원인).
+- Vercel 은 정적 파일(`dist`)만 올리므로 이 서버를 쓰지 않는다.
+
 ## 로컬 전용
 
 - 서버는 **127.0.0.1** 에만 열린다 (같은 네트워크의 다른 기기도 접속 불가).

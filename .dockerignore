@@ -2,5 +2,8 @@ node_modules
 dist
 .git
 .env
-tests
+tests/out
+tests/fixtures
+public/pdfjs
+desktop.ini
 *.log

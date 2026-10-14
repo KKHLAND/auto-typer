@@ -5,7 +5,8 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST = path.join(__dirname, 'dist');
-const PORT = Number(process.env.PORT) || 3000;
+// Cloud Run 은 PORT(기본 8080)를 주고, 0.0.0.0 에서 기다려야 한다
+const PORT = Number(process.env.PORT) || 8080;
 const HOST = '0.0.0.0';
 
 const MIME_TYPES = {
@@ -35,7 +36,15 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  let reqPath = decodeURIComponent(req.url.split('?')[0]);
+  let reqPath;
+  try {
+    reqPath = decodeURIComponent((req.url || '/').split('?')[0]);
+  } catch {
+    // 잘못된 %인코딩 주소 하나로 서버 전체가 멈추지 않게
+    res.writeHead(400, { 'Content-Type': 'text/plain' });
+    res.end('Bad Request');
+    return;
+  }
   let filePath = path.join(DIST, reqPath);
 
   if (!filePath.startsWith(DIST)) {
