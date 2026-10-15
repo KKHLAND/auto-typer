@@ -41,23 +41,26 @@ export function loadSettings() {
   try {
     const raw = JSON.parse(localStorage.getItem(SKEY) || '{}');
     const hw = raw.handwritingVersion >= 3 && (raw.handwriting === 'include' || raw.handwriting === 'ignore') ? raw.handwriting : 'auto';
+    // 이미지 생성 모델(유료 전용)은 더 쓰지 않는다: 예전 설정의 imageModel 은 지우고,
+    // 글 모델 칸에 이미지 모델이 들어 있었다면 기본 모델(무료 Flash)로 되돌린다
+    const { imageModel, ...rest } = raw;
+    const paidModel = /image|imagen/i.test(rest.model || '');
     const migrated = {
       apiKey: '',
       model: '',
-      imageModel: 'gemini-3.1-flash-lite-image',
       engine: 'auto',
       mdAction: 'ask',
-      ...raw,
+      ...rest,
+      ...(paidModel ? { model: '' } : {}),
       handwriting: hw,
       handwritingVersion: 3,
-      imageModel: raw.imageModel || 'gemini-3.1-flash-lite-image',
     };
-    if (raw.handwriting !== hw || raw.handwritingVersion !== 3) {
+    if (raw.handwriting !== hw || raw.handwritingVersion !== 3 || imageModel !== undefined || paidModel) {
       saveSettings(migrated);
     }
     return migrated;
   } catch {
-    return { apiKey: '', model: '', imageModel: 'gemini-3.1-flash-lite-image', handwriting: 'auto', engine: 'auto', mdAction: 'ask', handwritingVersion: 3 };
+    return { apiKey: '', model: '', handwriting: 'auto', engine: 'auto', mdAction: 'ask', handwritingVersion: 3 };
   }
 }
 export function saveSettings(s) {

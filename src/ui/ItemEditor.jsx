@@ -2,7 +2,8 @@ import { useRef, useState } from 'react';
 import * as Ic from './icons.jsx';
 import { TYPE_LABEL } from '../model.js';
 import { clearGuesses, hasGuess, inlineHtml, paragraphs } from '../engine/markup.js';
-import { generateFigureImage, DEFAULT_IMAGE_MODEL } from '../services/gemini.js';
+import { generateFigureSvg } from '../services/gemini.js';
+import { svgToFigure, imageFileToFigure } from '../services/svgFigure.js';
 
 const FLAGS = [
   ['todo', '검토 전', 'gray'],
@@ -182,74 +183,45 @@ export default function BlockEditor({ block: b, pageImage, settings, notify, onC
             <div className="fig-box">
               {b.figure?.src ? <img src={b.figure.src} alt="" /> : <Ic.Image size={26} />}
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                <label className="btn sm">
-                  {b.figure ? '바꾸기' : '그림 넣기'}
+                <label className="btn sm" title="사진·삽화 파일(PNG·JPG·WEBP·GIF)을 그대로 넣습니다">
+                  <Ic.Image size={13} /> {b.figure ? '그림 바꾸기' : '그림 첨부'}
                   <input
                     type="file"
-                    accept="image/png,image/jpeg"
+                    accept="image/png,image/jpeg,image/webp,image/gif,image/bmp"
                     hidden
                     onChange={async (e) => {
                       const f = e.target.files[0];
+                      e.target.value = '';
                       if (!f) return;
-                      const src = await new Promise((r) => {
-                        const fr = new FileReader();
-                        fr.onload = () => r(fr.result);
-                        fr.readAsDataURL(f);
-                      });
-                      const im = new Image();
-                      im.onload = () => set({ figure: { src, w: im.width, h: im.height } });
-                      im.src = src;
+                      try {
+                        set({ figure: await imageFileToFigure(f) });
+                      } catch (err) {
+                        notify?.(err.message, 'err');
+                      }
                     }}
                   />
                 </label>
                 {settings?.apiKey && (
-                  <button
-                    type="button"
-                    className="btn sm"
-                    onClick={() => setShowGen(!showGen)}
-                  >
-                    <Ic.Sparkle size={13} /> {showGen ? '닫기' : 'AI 그림 생성'}
+                  <button type="button" className="btn sm" onClick={() => { if (!showGen && !genPrompt) setGenPrompt(b.text || ''); setShowGen(!showGen); }} title="그래프·도형·실험 장치·차트를 AI 가 그립니다 (무료)">
+                    <Ic.Sparkle size={13} /> {showGen ? '닫기' : 'AI 도해 그리기'}
                   </button>
                 )}
               </div>
             </div>
             {showGen && settings?.apiKey && (
               <div style={{ background: 'var(--bg-3)', padding: 12, borderRadius: 10, marginBottom: 12, border: '1px solid var(--line)' }}>
-                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>
-                  AI 그림 생성 (모델: {settings?.imageModel || DEFAULT_IMAGE_MODEL})
+                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>AI 도해 그리기 (무료)</div>
+                <div className="hint" style={{ marginTop: 0, marginBottom: 6 }}>
+                  수학 그래프·기하 도형·실험 장치·회로·통계 차트처럼 선으로 그리는 그림에 알맞습니다. 사진·예술 삽화는 [그림 첨부]를 쓰세요.
                 </div>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <input
-                    className="input sm"
-                    style={{ flex: 1 }}
-                    placeholder="생성할 그림/도형 설명 (예: 직각삼각형 ABC와 외접원)"
-                    value={genPrompt}
-                    onChange={(e) => setGenPrompt(e.target.value)}
-                    onKeyDown={async (e) => {
-                      if (e.key === 'Enter' && genPrompt.trim() && !generating) {
-                        e.preventDefault();
-                        try {
-                          setGenerating(true);
-                          const src = await generateFigureImage({
-                            key: settings.apiKey,
-                            prompt: genPrompt,
-                            imageModel: settings.imageModel || DEFAULT_IMAGE_MODEL,
-                          });
-                          const im = new Image();
-                          im.onload = () => {
-                            set({ figure: { src, w: im.width, h: im.height }, text: b.text || genPrompt });
-                            setShowGen(false);
-                            notify?.('그림이 성공적으로 생성되었습니다.');
-                          };
-                          im.src = src;
-                        } catch (err) {
-                          notify?.(err.message || String(err), 'err');
-                        } finally {
-                          setGenerating(false);
-                        }
-                      }
-                    }}
-                  />
+                <textarea
+                  className="textarea"
+                  rows={3}
+                  placeholder={'예) 좌표평면에 y = x² − 2x − 3 의 그래프, x절편 −1·3 과 꼭짓점 (1, −4) 표시\n예) 직각삼각형 ABC (∠C = 90°), AC = 3, BC = 4, 빗변 AB 표시'}
+                  value={genPrompt}
+                  onChange={(e) => setGenPrompt(e.target.value)}
+                />
+                <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
                   <button
                     type="button"
                     className="btn sm primary"
@@ -257,18 +229,11 @@ export default function BlockEditor({ block: b, pageImage, settings, notify, onC
                     onClick={async () => {
                       try {
                         setGenerating(true);
-                        const src = await generateFigureImage({
-                          key: settings.apiKey,
-                          prompt: genPrompt,
-                          imageModel: settings.imageModel || DEFAULT_IMAGE_MODEL,
-                        });
-                        const im = new Image();
-                        im.onload = () => {
-                          set({ figure: { src, w: im.width, h: im.height }, text: b.text || genPrompt });
-                          setShowGen(false);
-                          notify?.('그림이 성공적으로 생성되었습니다.');
-                        };
-                        im.src = src;
+                        const svg = await generateFigureSvg({ key: settings.apiKey, model: settings.model, prompt: genPrompt, context: b.text || '' });
+                        const fig = await svgToFigure(svg);
+                        set({ figure: fig });
+                        setShowGen(false);
+                        notify?.('도해를 그렸습니다. 마음에 들지 않으면 설명을 고쳐 다시 그려 보세요.');
                       } catch (err) {
                         notify?.(err.message || String(err), 'err');
                       } finally {
@@ -276,10 +241,29 @@ export default function BlockEditor({ block: b, pageImage, settings, notify, onC
                       }
                     }}
                   >
-                    {generating ? '생성 중...' : '생성'}
+                    {generating ? <><span className="spin" /> 그리는 중…</> : b.figure?.svg ? '다시 그리기' : '그리기'}
                   </button>
                 </div>
               </div>
+            )}
+            {b.figure?.svg && (
+              <details style={{ marginBottom: 10 }}>
+                <summary style={{ fontSize: 12.5, color: 'var(--ink-3)', cursor: 'pointer' }}>도해 SVG 코드 직접 고치기</summary>
+                <textarea
+                  className="textarea"
+                  rows={8}
+                  style={{ fontFamily: 'ui-monospace, Consolas, monospace', fontSize: 12, marginTop: 6 }}
+                  defaultValue={b.figure.svg}
+                  onBlur={async (e) => {
+                    if (e.target.value === b.figure.svg) return;
+                    try {
+                      set({ figure: await svgToFigure(e.target.value, { mmW: b.figure.mmW }) });
+                    } catch (err) {
+                      notify?.(err.message, 'err');
+                    }
+                  }}
+                />
+              </details>
             )}
             {textArea('text', '그림 설명 (선택)')}
           </>

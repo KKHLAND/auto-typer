@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import * as Ic from './icons.jsx';
-import { testKey, listModels, DEFAULT_MODEL, DEFAULT_IMAGE_MODEL, normalizeModelName } from '../services/gemini.js';
+import { testKey, listModels, DEFAULT_MODEL } from '../services/gemini.js';
 
 export default function Settings({ settings, setSettings, notify, tab: initialTab }) {
   const [tab, setTab] = useState(initialTab === 'help' ? 'help' : 'ai');
@@ -59,13 +59,13 @@ export default function Settings({ settings, setSettings, notify, tab: initialTa
               <ol className="hint" style={{ paddingLeft: 18 }}>
                 <li><a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer">Google AI Studio → API 키</a> 에 접속해 로그인</li>
                 <li>‘API 키 만들기’ → 생성된 키(‘AIza…’ 또는 ‘AQ.…’ 로 시작)를 복사해 위 칸에 붙여넣기</li>
-                <li>‘확인하고 저장’ — 키는 이 컴퓨터의 브라우저에만 저장되며, <b>문서 인식과 이미지 생성에 자동 공통 적용</b>됩니다</li>
+                <li>‘확인하고 저장’ — 키는 이 컴퓨터의 브라우저에만 저장되며, <b>문서 인식과 AI 도해 그리기에 함께 쓰입니다</b>됩니다</li>
               </ol>
               {settings.apiKey && (
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6, flexWrap: 'wrap' }}>
                   <span className="chip green"><Ic.Shield size={12} /> Gemini API 키 등록 완료 ({settings.apiKey.startsWith('AQ.') ? 'AQ…' : settings.apiKey.startsWith('AIza') ? 'AIza…' : '연동됨'})</span>
                   <span className="chip solid-blue"><Ic.Check size={12} /> 문서/수식 인식 연동</span>
-                  <span className="chip solid-blue"><Ic.Check size={12} /> 이미지 생성 자동 연동</span>
+                  <span className="chip solid-blue"><Ic.Check size={12} /> AI 도해(무료) 연동</span>
                 </div>
               )}
             </div>
@@ -87,31 +87,17 @@ export default function Settings({ settings, setSettings, notify, tab: initialTa
           </div>
           <div className="kv">
             <div className="k">
-              이미지 생성 모델
-              <small>문제에 삽입할 삽화·도형·그래프 생성 시 사용합니다.</small>
+              그림·도해
+              <small>무료 키로 모두 쓸 수 있습니다.</small>
             </div>
-            <div>
-              <div className="row-inline">
-                <input
-                  className="input"
-                  style={{ maxWidth: 320 }}
-                  value={settings.imageModel || DEFAULT_IMAGE_MODEL}
-                  placeholder={DEFAULT_IMAGE_MODEL}
-                  onChange={(e) => setSettings({ ...settings, imageModel: normalizeModelName(e.target.value) })}
-                />
-                <span className="chip blue">기본 모델: {DEFAULT_IMAGE_MODEL}</span>
-              </div>
-              <div className="hint" style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
-                {settings.apiKey ? (
-                  <span style={{ color: 'var(--blue)', fontWeight: 600 }}>
-                    <Ic.Check size={13} style={{ verticalAlign: -2 }} /> 등록된 Gemini API 키에 자동 연동되어 작동합니다 (별도 키 불필요).
-                  </span>
-                ) : (
-                  <span style={{ color: 'var(--ink-3)' }}>
-                    위 'Gemini API 키'를 등록하면 이미지 생성 기능에도 자동으로 함께 연동됩니다.
-                  </span>
-                )}
-              </div>
+            <div className="hint" style={{ lineHeight: 1.7 }}>
+              <b>AI 도해 그리기</b> — 그래프·도형·실험 장치·통계 차트를 위의 인식 모델(무료 Flash)이 SVG 코드로 그리고, 브라우저가 고해상도 그림으로 바꿔 hwpx 에 넣습니다.
+              <br />
+              <b>그림 첨부</b> — 사진·삽화는 그림 블록의 [그림 첨부]로 파일을 넣으면 hwpx 에 그대로 들어갑니다.
+              <br />
+              <span style={{ color: 'var(--ink-3)' }}>
+                Gemini 의 이미지 생성 모델(gemini-*-image, Imagen)은 무료 사용량이 없어(무료 키는 오류) 쓰지 않습니다.
+              </span>
             </div>
           </div>
           <div className="kv">

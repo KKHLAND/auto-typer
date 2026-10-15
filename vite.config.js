@@ -1,5 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import fs from 'node:fs';
+import path from 'node:path';
 
 // 로컬 전용 원칙
 //  - 서버는 이 컴퓨터(127.0.0.1)에서만 열린다. 같은 네트워크의 다른 기기에서도 접속 불가.
@@ -33,6 +35,25 @@ const serverConfig = {
   port: Number(process.env.PORT) || 5180,
   strictPort: true,
 };
+
+// 구글 드라이브 폴더는 public/ 안에 숨김 시스템 파일 desktop.ini 를 만들어 두는데,
+// vite 가 그것을 dist 로 복사하다 실패한다(ENOENT) → 빌드 전에 지운다 (폴더 아이콘 정보일 뿐)
+function removeDesktopIni(dir) {
+  if (!fs.existsSync(dir)) return;
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) removeDesktopIni(p);
+    else if (e.name.toLowerCase() === 'desktop.ini') {
+      try {
+        fs.chmodSync(p, 0o666);
+        fs.rmSync(p, { force: true });
+      } catch {
+        /* 지울 수 없으면 그대로 */
+      }
+    }
+  }
+}
+removeDesktopIni(path.resolve('public'));
 
 export default defineConfig({
   base: './',

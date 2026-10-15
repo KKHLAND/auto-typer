@@ -3,7 +3,6 @@ import { fixLatexEscapes } from '../model.js';
 const BASE = 'https://generativelanguage.googleapis.com/v1beta';
 
 export const DEFAULT_MODEL = 'gemini-flash-latest';
-export const DEFAULT_IMAGE_MODEL = 'gemini-3.1-flash-lite-image';
 
 /** 모델명 오타 교정 (예: falsh -> flash) */
 export function normalizeModelName(m) {
@@ -85,7 +84,8 @@ export async function listModels(key) {
   if (!r.ok) throw new Error(await errText(r));
   const j = await r.json();
   return (j.models || [])
-    .filter((m) => m.supportedGenerationMethods?.includes('generateContent') && /gemini/.test(m.name) && !/embedding|tts|image-generation|live|audio/.test(m.name))
+    // 이미지 생성 모델(gemini-*-image)은 무료 등급이 없어 목록에서 뺀다
+    .filter((m) => m.supportedGenerationMethods?.includes('generateContent') && /gemini/.test(m.name) && !/embedding|tts|image|imagen|live|audio/.test(m.name))
     .map((m) => ({ id: m.name.replace('models/', ''), label: m.displayName || m.name }))
     .sort((a, b) => rank(b.id) - rank(a.id));
 }
@@ -463,12 +463,7 @@ export async function testKey(key) {
         },
         k,
       );
-      if (ping.ok) {
-        return [
-          { id: DEFAULT_MODEL, label: 'Gemini Flash (기본)' },
-          { id: DEFAULT_IMAGE_MODEL, label: 'Gemini Flash Lite Image (이미지 생성)' },
-        ];
-      }
+      if (ping.ok) return [{ id: DEFAULT_MODEL, label: 'Gemini Flash (기본)' }];
       const err = await errText(ping);
       throw new Error(err || e.message);
     } catch (pingErr) {
@@ -478,27 +473,54 @@ export async function testKey(key) {
   return [{ id: DEFAULT_MODEL, label: 'Gemini Flash (기본)' }];
 }
 
-/** AI 로 그림·삽화·도형 이미지 생성 (기본: gemini-3.1-flash-lite-image) */
-export async function generateFigureImage({ key, prompt, imageModel = DEFAULT_IMAGE_MODEL, signal }) {
-  const model = normalizeModelName(imageModel) || DEFAULT_IMAGE_MODEL;
+// ── AI 도해(SVG) ──
+// 이미지 생성 모델(gemini-*-image, Imagen)은 Gemini API 무료 등급이 없어(무료 키는 401·429) 쓰지 않는다.
+// 대신 무료인 글 모델이 SVG 코드를 쓰고, 브라우저가 PNG 로 그려 hwpx 그림으로 넣는다(services/svgFigure.js).
+const SVG_SCHEMA = {
+  type: 'OBJECT',
+  properties: { svg: { type: 'STRING', description: '<svg ...>…</svg> 전체 코드' } },
+  required: ['svg'],
+};
+
+const SVG_RULES = `너는 한국 학교 시험지·학습지에 넣을 도해를 SVG 코드로 정확하게 그리는 담당자다.
+요청한 그림 하나를 <svg> 하나로 그려 svg 에 담아라.
+[반드시 지킬 것]
+- 시험지 인쇄용 흑백: 흰 바탕, 검은 선(stroke="#000"), 선 굵기 1.5~2.5, 필요하면 회색(#888, #ddd) 채우기만. 색은 요청이 있을 때만.
+- viewBox 를 꼭 쓰고(예: viewBox="0 0 480 360") 그림이 잘리지 않게 사방 20 이상 여백. width·height 도 viewBox 와 같게.
+- 수학·과학적으로 정확하게: 좌표를 직접 계산해 그린다(직각은 정말 90°, 원 위의 점은 정말 원 위, 그래프는 함수값을 계산한 점들을 이은 <polyline>/<path>).
+  좌표평면은 x·y 축에 화살표(<marker>), 원점 O, 축 이름 x, y, 필요한 눈금·숫자를 단다.
+- 글자: <text> 로, font-size 16~20, 점 이름(A, B, P), 변의 길이, 각(θ, 60°), 범례, 단위. 수식 기호는 유니코드(², √, π, θ, °, ∠, △).
+  한글 글자도 된다. 글자가 선·다른 글자와 겹치지 않게 자리를 잡는다.
+- 쓰지 말 것: <script>, <image>, <foreignObject>, 외부 링크·글꼴, CSS 애니메이션, 설명 글(그림만).
+- 실험 장치·회로도·지도·통계 차트(막대·꺾은선·원그래프)도 같은 방식으로 단순하고 또렷하게.`;
+
+/** 설명(+ 같은 문항의 글) → SVG 코드 (무료 글 모델) */
+export async function generateFigureSvg({ key, model, prompt, context = '', signal }) {
+  const text = [SVG_RULES, context ? `[이 그림이 들어갈 문항·자료의 글]\n${context}` : '', `[그릴 그림]\n${prompt}`].filter(Boolean).join('\n\n');
   const r = await fetchWithAuth(
-    `${BASE}/models/${model}:generateContent`,
+    `${BASE}/models/${model || DEFAULT_MODEL}:generateContent`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        contents: [{ role: 'user', parts: [{ text }] }],
+        generationConfig: { temperature: 0.2, responseMimeType: 'application/json', responseSchema: SVG_SCHEMA },
       }),
       signal,
     },
     key,
   );
-  if (!r.ok) throw new Error(await errText(r));
-  const j = await r.json();
-  for (const part of j.candidates?.[0]?.content?.parts || []) {
-    if (part.inlineData?.data) {
-      return `data:${part.inlineData.mimeType || 'image/png'};base64,${part.inlineData.data}`;
-    }
+  if (!r.ok) {
+    const msg = await errText(r);
+    if (r.status === 429) throw new Error('무료 사용량을 잠시 다 썼습니다. 1분쯤 뒤에 다시 그려 보세요.');
+    throw new Error(`Gemini 오류: ${msg}`);
   }
-  throw new Error('생성된 이미지 데이터를 찾을 수 없습니다.');
+  const j = await r.json();
+  const out = (j.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('');
+  if (!out) throw new Error(`빈 응답 (${j.candidates?.[0]?.finishReason || '이유 미상'})`);
+  try {
+    return JSON.parse(out).svg || '';
+  } catch {
+    return out; // JSON 이 깨져도 <svg> 부분만 꺼내 쓴다
+  }
 }

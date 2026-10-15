@@ -187,6 +187,7 @@ export default function Project({ record, pages, onSave, onBack, notify, setting
             <button className="pill-btn" onClick={() => addBlock(newBlock('list', { text: '• ' }))}><Ic.Plus size={13} /> 목록</button>
             <button className="pill-btn" onClick={() => addBlock(newBlock('box', { title: '' }))}><Ic.Plus size={13} /> 상자</button>
             <button className="pill-btn" onClick={() => addBlock(newBlock('table'))}><Ic.Plus size={13} /> 표</button>
+            <button className="pill-btn" onClick={() => addBlock(newBlock('figure'))} title="그림 첨부 또는 AI 도해 그리기(무료)"><Ic.Plus size={13} /> 그림</button>
             </>}
             <span className="sep" />
             <button className="pill-btn" onClick={() => setBlocks(blocks.map((x) => ({ ...x, flag: 'done' })))}><Ic.Check size={13} /> 모두 검토 완료</button>
